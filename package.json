@@ -1,0 +1,62 @@
+{
+  "name": "axly",
+  "version": "1.0.30",
+  "description": "A powerful HTTP client library built on top of Axios with features like retry logic, progress tracking, request cancellation, and React integration.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "axly": "dist/index.js"
+  },
+  "type": "module",
+  "author": "Harshalkatakiya",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "prettier": "prettier --write --ignore-unknown .",
+    "lint": "eslint . --fix",
+    "prepare": "bun run build",
+    "release": "npm version patch && npm publish --access public --tag latest"  
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Harshalkatakiya/axly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Harshalkatakiya/axly/issues"
+  },
+  "homepage": "https://github.com/Harshalkatakiya/axly#readme",
+  "keywords": [
+    "axly",
+    "axios",
+    "http-client",
+    "api-client",
+    "rest-client",
+    "api-helper"
+  ],
+  "dependencies": {
+    "axios": "^1.7.7",
+    "react": "^19.0.0-rc.1",
+    "react-dom": "^19.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^1.2.3",
+    "@types/node": "^22.9.1",
+    "@types/react": "^18.3.12",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "prettier": "3.3.3",
+    "ts-node": "^10.9.2"
+  }
+}
