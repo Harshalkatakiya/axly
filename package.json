@@ -1,29 +1,22 @@
 {
   "name": "axly",
-  "version": "1.0.30",
-  "description": "A powerful HTTP client library built on top of Axios with features like retry logic, progress tracking, request cancellation, and React integration.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "axly": "dist/index.js"
-  },
+  "version": "1.0.0",
   "type": "module",
-  "author": "Harshalkatakiya",
-  "license": "MIT",
+  "description": "A modern, flexible, and powerful HTTP client built on top of Axios with advanced features like dynamic configurations, request cancellation, retry logic, caching, middleware support, and optional Socket.IO integration.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "axly": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "prettier": "prettier --write --ignore-unknown .",
-    "lint": "eslint . --fix",
-    "prepare": "bun run build",
-    "release": "npm version patch && npm publish --access public --tag latest"  
+    "watch": "tsc --watch",
+    "release": "npm version patch && npm publish --access public --tag latest",
+    "prettier:check": "prettier -c .",
+    "prettier": "prettier -w -u ."
   },
-  "files": [
-    "dist/**/*",
-    "README.md",
-    "LICENSE"
-  ],
+  "license": "MIT",
+  "homepage": "https://www.npmjs.com/package/axly",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Harshalkatakiya/axly.git"
@@ -31,32 +24,40 @@
   "bugs": {
     "url": "https://github.com/Harshalkatakiya/axly/issues"
   },
-  "homepage": "https://github.com/Harshalkatakiya/axly#readme",
-  "keywords": [
-    "axly",
-    "axios",
-    "http-client",
-    "api-client",
-    "rest-client",
-    "api-helper"
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
-  "dependencies": {
-    "axios": "^1.7.7",
-    "react": "^19.0.0-rc.1",
-    "react-dom": "^19.0.0-rc.1"
+  "author": {
+    "name": "Harshal Katakiya",
+    "email": "katakiyaharshl001@gmail.com",
+    "url": "https://github.com/Harshalkatakiya"
   },
   "devDependencies": {
-    "@eslint/compat": "^1.2.3",
-    "@types/node": "^22.9.1",
-    "@types/react": "^18.3.12",
-    "@typescript-eslint/eslint-plugin": "^8.15.0",
-    "@typescript-eslint/parser": "^8.15.0",
-    "eslint": "^9.15.0",
-    "eslint-plugin-prettier": "^5.2.1",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.14",
-    "prettier": "3.3.3",
-    "ts-node": "^10.9.2"
+    "@harshalkatakiya/prettier-config": "^1.0.16",
+    "@types/node": "^22.10.9",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3"
+  },
+  "keywords": [
+    "http",
+    "axios",
+    "fetch",
+    "http-client",
+    "typescript",
+    "react",
+    "nextjs",
+    "nodejs",
+    "socket.io",
+    "middleware",
+    "caching",
+    "retry-logic"
+  ],
+  "dependencies": {
+    "axios": "^1.7.9"
   }
 }
