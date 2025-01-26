@@ -70,13 +70,13 @@ bun add axly
 Start by configuring Axly with your base URL and other settings:
 
 ```javascript
-import { setAxiosConfig } from 'axly';
+import { setAxiosConfig } from "axly";
 
 setAxiosConfig({
-  baseURL: 'https://api.example.com',
-  token: 'user-jwt-auth-token',
+  baseURL: "https://api.example.com",
+  token: "user-jwt-auth-token",
   defaultHeaders: {
-    'Custom-Header': 'value'
+    "Custom-Header": "value",
   },
   interceptors: {
     request: (config) => {
@@ -94,25 +94,25 @@ setAxiosConfig({
     responseError: (error) => {
       // Handle response error
       return Promise.reject(error);
-    }
-  }
+    },
+  },
 });
 ```
 
 Then make a request:
 
 ```javascript
-import { makeRequest } from 'axly';
+import { makeRequest } from "axly";
 
 const fetchData = async () => {
   try {
     const response = await makeRequest({
-      method: 'GET',
-      url: '/api/data'
+      method: "GET",
+      url: "/api/data",
     });
     console.log(response.data);
   } catch (error) {
-    console.error('Request failed:', error);
+    console.error("Request failed:", error);
   }
 };
 ```
@@ -124,8 +124,8 @@ const fetchData = async () => {
 Use the `useAxios` hook to manage state and requests in React components:
 
 ```javascript
-import React, { useEffect } from 'react';
-import { useAxios } from 'axly';
+import React, { useEffect } from "react";
+import { useAxios } from "axly";
 
 const App = () => {
   const { makeRequest, isLoading, uploadProgress, downloadProgress } =
@@ -135,12 +135,12 @@ const App = () => {
     const fetchData = async () => {
       try {
         const response = await makeRequest({
-          method: 'GET',
-          url: '/todos/1'
+          method: "GET",
+          url: "/todos/1",
         });
         console.log(response.data);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error("Error fetching data:", error);
       }
     };
     fetchData();
@@ -148,9 +148,7 @@ const App = () => {
 
   return (
     <div>
-      {isLoading ?
-        <p>Loading...</p>
-      : <p>Data loaded!</p>}
+      {isLoading ? <p>Loading...</p> : <p>Data loaded!</p>}
       <p>Upload Progress: {uploadProgress}%</p>
       <p>Download Progress: {downloadProgress}%</p>
     </div>
@@ -167,22 +165,22 @@ export default App;
 Axly can be used in Node.js for server-side requests:
 
 ```javascript
-import { makeRequest, setAxiosConfig } from 'axly';
+import { makeRequest, setAxiosConfig } from "axly";
 
 setAxiosConfig({
-  baseURL: 'https://api.example.com'
+  baseURL: "https://api.example.com",
 });
 
 const fetchData = async () => {
   try {
     const response = await makeRequest({
-      method: 'GET',
-      url: '/data'
+      method: "GET",
+      url: "/data",
     });
 
     console.log(response.data);
   } catch (error) {
-    console.error('Error fetching data:', error);
+    console.error("Error fetching data:", error);
   }
 };
 
@@ -207,31 +205,31 @@ Configures global settings for Axly.
 
 ```javascript
 setAxiosConfig({
-  baseURL: 'https://api.example.com',
-  token: 'your-auth-token',
-  REQUEST_HEADER_AUTH_KEY: 'Authorization',
-  TOKEN_TYPE: 'Bearer ',
+  baseURL: "https://api.example.com",
+  token: "your-auth-token",
+  REQUEST_HEADER_AUTH_KEY: "Authorization",
+  TOKEN_TYPE: "Bearer ",
   defaultHeaders: {
-    'Custom-Header': 'value'
+    "Custom-Header": "value",
   },
   interceptors: {
     request: (config) => {
-      console.log('Request sent:', config);
+      console.log("Request sent:", config);
       return config;
     },
     response: (response) => {
-      console.log('Response received:', response);
+      console.log("Response received:", response);
       return response;
     },
     requestError: (error) => {
-      console.error('Request error:', error);
+      console.error("Request error:", error);
       return Promise.reject(error);
     },
     responseError: (error) => {
-      console.error('Response error:', error);
+      console.error("Response error:", error);
       return Promise.reject(error);
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -257,9 +255,9 @@ Make HTTP requests with dynamic configurations.
 
 ```javascript
 const response = await makeRequest({
-  method: 'GET',
-  url: '/users',
-  params: { page: 1 }
+  method: "GET",
+  url: "/users",
+  params: { page: 1 },
 });
 ```
 
@@ -290,9 +288,9 @@ const { makeRequest, isLoading, uploadProgress, downloadProgress } = useAxios();
 
 ```javascript
 const response = await makeRequest({
-  method: 'GET',
-  url: '/users',
-  params: { page: 1 }
+  method: "GET",
+  url: "/users",
+  params: { page: 1 },
 });
 console.log(response.data);
 ```
@@ -303,13 +301,13 @@ console.log(response.data);
 
 ```javascript
 const response = await makeRequest({
-  method: 'POST',
-  url: '/users',
+  method: "POST",
+  url: "/users",
   data: {
-    name: 'John Doe',
-    email: 'john@example.com'
+    name: "John Doe",
+    email: "john@example.com",
   },
-  contentType: 'application/json'
+  contentType: "application/json",
 });
 console.log(response.data);
 ```
@@ -323,16 +321,16 @@ const { makeRequest, uploadProgress } = useAxios();
 
 const handleFileUpload = async (file) => {
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append("file", file);
 
   await makeRequest({
-    method: 'POST',
-    url: '/upload',
+    method: "POST",
+    url: "/upload",
     data: formData,
-    contentType: 'multipart/form-data',
+    contentType: "multipart/form-data",
     onUploadProgress: (progress) => {
       console.log(`Upload Progress: ${progress}%`);
-    }
+    },
   });
 };
 ```
@@ -349,20 +347,20 @@ const controller = new AbortController();
 const fetchData = async () => {
   try {
     const response = await makeRequest({
-      method: 'GET',
-      url: '/slow-endpoint',
+      method: "GET",
+      url: "/slow-endpoint",
       cancelable: true,
       signal: controller.signal, // Pass the signal to the request
       onCancel: () => {
-        console.log('Request was canceled');
-      }
+        console.log("Request was canceled");
+      },
     });
     console.log(response.data);
   } catch (error) {
-    if (error.name === 'CanceledError') {
-      console.log('Request canceled:', error.message);
+    if (error.name === "CanceledError") {
+      console.log("Request canceled:", error.message);
     } else {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
     }
   }
 };
@@ -380,25 +378,25 @@ setAxiosConfig({
   interceptors: {
     request: (config) => {
       // Modify request config if needed
-      console.log('Request sent:', config);
+      console.log("Request sent:", config);
       return config;
     },
     response: (response) => {
       // Handle response data if needed
-      console.log('Response received:', response);
+      console.log("Response received:", response);
       return response;
     },
     requestError: (error) => {
       // Handle request error
-      console.error('Request error:', error);
+      console.error("Request error:", error);
       return Promise.reject(error);
     },
     responseError: (error) => {
       // Handle response error
-      console.error('Response error:', error);
+      console.error("Response error:", error);
       return Promise.reject(error);
-    }
-  }
+    },
+  },
 });
 ```
 
