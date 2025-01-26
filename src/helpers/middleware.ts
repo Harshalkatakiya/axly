@@ -8,9 +8,11 @@ import {
 export const MiddlewareHelpers = {
   createLoggerMiddleware: (
     options = { logRequests: true, logResponses: true, logErrors: true },
-  ) => {
+  ): AxlyMiddleware => {
     return {
-      onRequest: async (config: AxlyRequestConfig) => {
+      onRequest: async (
+        config: AxlyRequestConfig,
+      ): Promise<AxlyRequestConfig> => {
         if (options.logRequests) {
           console.log(
             `Request: ${config.method?.toUpperCase()} ${config.url}`,
@@ -23,7 +25,10 @@ export const MiddlewareHelpers = {
         }
         return config;
       },
-      onResponse: async <T>(response: AxlyResponse<T>) => {
+
+      onResponse: async <T>(
+        response: AxlyResponse<T>,
+      ): Promise<AxlyResponse<T>> => {
         if (options.logResponses) {
           console.log(`Response: ${response.status} ${response.config.url}`, {
             data: response.data,
@@ -32,7 +37,8 @@ export const MiddlewareHelpers = {
         }
         return response;
       },
-      onError: async <T>(error: AxlyError<T>) => {
+
+      onError: async <T>(error: AxlyError<T>): Promise<AxlyError<T>> => {
         if (options.logErrors) {
           console.error(
             `Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`,
@@ -45,15 +51,17 @@ export const MiddlewareHelpers = {
         }
         return error;
       },
-    } as AxlyMiddleware;
+    };
   },
 
   createAuthMiddleware: (
     getToken: () => Promise<string>,
     headerName = "Authorization",
-  ) => {
+  ): AxlyMiddleware => {
     return {
-      onRequest: async (config: AxlyRequestConfig) => {
+      onRequest: async (
+        config: AxlyRequestConfig,
+      ): Promise<AxlyRequestConfig> => {
         const token = await getToken();
         return {
           ...config,
@@ -63,12 +71,12 @@ export const MiddlewareHelpers = {
           },
         };
       },
-    } as AxlyMiddleware;
+    };
   },
 
-  createErrorHandlerMiddleware: () => {
+  createErrorHandlerMiddleware: (): AxlyMiddleware => {
     return {
-      onError: async <T>(error: AxlyError<T>) => {
+      onError: async <T>(error: AxlyError<T>): Promise<AxlyError<T>> => {
         const enhancedError = {
           ...error,
           timestamp: new Date().toISOString(),
@@ -76,26 +84,31 @@ export const MiddlewareHelpers = {
         };
         return enhancedError;
       },
-    } as AxlyMiddleware;
+    };
   },
 
   createTransformMiddleware: (
     requestTransformer?: (data: any) => any,
     responseTransformer?: (data: any) => any,
-  ) => {
+  ): AxlyMiddleware => {
     return {
-      onRequest: async (config: AxlyRequestConfig) => {
+      onRequest: async (
+        config: AxlyRequestConfig,
+      ): Promise<AxlyRequestConfig> => {
         if (requestTransformer && config.data) {
           return { ...config, data: requestTransformer(config.data) };
         }
         return config;
       },
-      onResponse: async <T>(response: AxlyResponse<T>) => {
+
+      onResponse: async <T>(
+        response: AxlyResponse<T>,
+      ): Promise<AxlyResponse<T>> => {
         if (responseTransformer && response.data) {
           return { ...response, data: responseTransformer(response.data) };
         }
         return response;
       },
-    } as AxlyMiddleware;
+    };
   },
 };

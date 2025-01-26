@@ -1,17 +1,17 @@
-import { AxiosRequestConfig } from "axios";
+import { AxiosProgressEvent, AxiosRequestConfig } from "axios";
 
 export interface AxlyRequestConfig extends AxiosRequestConfig {
   contentType?: string;
   customHeaders?: Record<string, string>;
-  onUploadProgress?: (progress: number) => void;
-  onDownloadProgress?: (progress: number) => void;
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void;
+  onDownloadProgress?: (progressEvent: AxiosProgressEvent) => void;
 }
 
 export interface AxlyResponse<T = any> {
   data: T;
   status: number;
   statusText: string;
-  headers: any;
+  headers: Record<string, string>;
   config: AxlyRequestConfig;
 }
 

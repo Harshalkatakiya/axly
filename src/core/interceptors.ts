@@ -1,5 +1,9 @@
-import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
-import { AxlyError, AxlyRequestConfig, AxlyResponse } from "./types";
+import {
+  AxiosInstance,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from "axios";
+import { AxlyError } from "./types";
 
 export class InterceptorManager {
   private requestInterceptors: number[] = [];
@@ -9,14 +13,12 @@ export class InterceptorManager {
 
   addRequestInterceptor(
     onFulfilled?: (
-      config: AxlyRequestConfig,
-    ) => AxlyRequestConfig | Promise<AxlyRequestConfig>,
+      config: InternalAxiosRequestConfig,
+    ) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>,
     onRejected?: (error: AxlyError) => any,
-  ) {
+  ): number {
     const id = this.axiosInstance.interceptors.request.use(
-      onFulfilled as (
-        config: AxiosRequestConfig,
-      ) => AxiosRequestConfig | Promise<AxiosRequestConfig>,
+      onFulfilled,
       onRejected,
     );
     this.requestInterceptors.push(id);
@@ -25,33 +27,31 @@ export class InterceptorManager {
 
   addResponseInterceptor(
     onFulfilled?: (
-      response: AxlyResponse,
-    ) => AxlyResponse | Promise<AxlyResponse>,
+      response: AxiosResponse,
+    ) => AxiosResponse | Promise<AxiosResponse>,
     onRejected?: (error: AxlyError) => any,
-  ) {
+  ): number {
     const id = this.axiosInstance.interceptors.response.use(
-      onFulfilled as (
-        response: AxiosResponse,
-      ) => AxiosResponse | Promise<AxiosResponse>,
+      onFulfilled,
       onRejected,
     );
     this.responseInterceptors.push(id);
     return id;
   }
 
-  removeRequestInterceptor(id: number) {
+  removeRequestInterceptor(id: number): void {
     this.axiosInstance.interceptors.request.eject(id);
     this.requestInterceptors = this.requestInterceptors.filter((i) => i !== id);
   }
 
-  removeResponseInterceptor(id: number) {
+  removeResponseInterceptor(id: number): void {
     this.axiosInstance.interceptors.response.eject(id);
     this.responseInterceptors = this.responseInterceptors.filter(
       (i) => i !== id,
     );
   }
 
-  clearAllInterceptors() {
+  clearAllInterceptors(): void {
     this.requestInterceptors.forEach((id) => this.removeRequestInterceptor(id));
     this.responseInterceptors.forEach((id) =>
       this.removeResponseInterceptor(id),
@@ -62,48 +62,57 @@ export class InterceptorManager {
   static addContentTypeInterceptor(
     instance: AxiosInstance,
     contentType = "application/json",
-  ) {
-    return instance.interceptors.request.use((config) => ({
-      ...config,
-      headers: {
-        ...config.headers,
-        "Content-Type": contentType,
-      },
-    }));
+  ): void {
+    instance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+      config.headers = config.headers || {};
+      config.headers["Content-Type"] = contentType;
+      return config;
+    });
   }
 
   static addAuthRefreshInterceptor(
     instance: AxiosInstance,
     refreshTokenCallback: () => Promise<string>,
     headerName = "Authorization",
-  ) {
+  ): void {
     let isRefreshing = false;
-    let failedQueue: ((token: string) => void)[] = [];
+    let failedQueue: Array<{
+      resolve: (value: string | null) => void;
+      reject: (reason?: any) => void;
+    }> = [];
 
     const processQueue = (token: string | null, error?: AxlyError) => {
       failedQueue.forEach((prom) => {
         if (error) {
           prom.reject(error);
         } else {
-          prom(token!);
+          prom.resolve(token!);
         }
       });
       failedQueue = [];
     };
 
-    return instance.interceptors.response.use(
-      (response) => response,
+    instance.interceptors.response.use(
+      (response: AxiosResponse) => response,
       async (error: AxlyError) => {
-        const originalRequest = error.config;
+        const originalRequest = error.config as InternalAxiosRequestConfig & {
+          _retry?: boolean;
+        };
 
-        if (error.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && !originalRequest._retry) {
           if (isRefreshing) {
-            return new Promise((resolve, reject) => {
-              failedQueue.push((token: string) => {
-                originalRequest.headers[headerName] = `Bearer ${token}`;
-                resolve(instance(originalRequest));
-              });
-            });
+            return new Promise<string>((resolve, reject) => {
+              failedQueue.push({ resolve, reject });
+            })
+              .then((token) => {
+                if (typeof token === "string") {
+                  originalRequest.headers = originalRequest.headers || {};
+                  originalRequest.headers[headerName] = `Bearer ${token}`;
+                  return instance(originalRequest);
+                }
+                return Promise.reject(new Error("Invalid token type"));
+              })
+              .catch((err) => Promise.reject(err));
           }
 
           originalRequest._retry = true;

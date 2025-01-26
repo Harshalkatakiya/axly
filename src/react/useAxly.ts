@@ -1,11 +1,15 @@
+import { AxlyError, AxlyRequestConfig } from "core/types";
 import { useEffect, useState } from "react";
-import { AxlyClient, AxlyError } from "../core/AxlyClient";
-import { AxlyRequestConfig } from "core/types";
+import { AxlyClient } from "../core/AxlyClient";
 
 export function useAxly<T = any>(
   client: AxlyClient,
   config: AxlyRequestConfig,
-) {
+): {
+  data: T | null;
+  isLoading: boolean;
+  error: AxlyError | null;
+} {
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<AxlyError | null>(null);

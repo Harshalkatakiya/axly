@@ -1,27 +1,62 @@
-import axios, { AxiosInstance } from "axios";
+import axios, {
+  AxiosInstance,
+  AxiosProgressEvent,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from "axios";
+import { setupProgress } from "./progress";
 import {
-  AxlyRequestConfig,
-  AxlyResponse,
   AxlyError,
   AxlyMiddleware,
+  AxlyRequestConfig,
+  AxlyResponse,
 } from "./types";
-import { setupProgress } from "./progress";
 
 export class AxlyClient {
   private instance: AxiosInstance;
   private middlewares: AxlyMiddleware[] = [];
-
   constructor(baseConfig: AxlyRequestConfig = {}) {
-    this.instance = axios.create(baseConfig);
+    const axiosConfig = this.convertToAxiosConfig(baseConfig);
+    this.instance = axios.create(axiosConfig);
+  }
+
+  private convertToAxiosConfig(
+    config: AxlyRequestConfig,
+  ): InternalAxiosRequestConfig {
+    const {
+      headers: AxiosHeaders = {},
+      onUploadProgress,
+      onDownloadProgress,
+      ...restConfig
+    } = config;
+
+    return {
+      ...restConfig,
+      headers,
+      onUploadProgress: onUploadProgress
+        ? (progressEvent: AxiosProgressEvent) => {
+            const percent = Math.round(
+              (progressEvent.loaded * 100) / (progressEvent.total || 1),
+            );
+            onUploadProgress(percent);
+          }
+        : undefined,
+      onDownloadProgress: onDownloadProgress
+        ? (progressEvent: AxiosProgressEvent) => {
+            const percent = Math.round(
+              (progressEvent.loaded * 100) / (progressEvent.total || 1),
+            );
+            onDownloadProgress(percent);
+          }
+        : undefined,
+    };
   }
 
   public addMiddleware(middleware: AxlyMiddleware): void {
     this.middlewares.push(middleware);
   }
 
-  public async request<T = any>(
-    config: AxlyRequestConfig,
-  ): Promise<AxlyResponse<T>> {
+  public async request<T>(config: AxlyRequestConfig): Promise<AxlyResponse<T>> {
     try {
       let processedConfig = await this.processRequestConfig(config);
       processedConfig = this.mergeContentType(processedConfig);
@@ -33,23 +68,51 @@ export class AxlyClient {
         setupProgress(processedConfig);
       }
 
-      const response = await this.instance.request<T>(processedConfig);
-      return await this.processResponse<T>(response);
+      const axiosConfig = this.convertToAxiosConfig(processedConfig);
+      const response = await this.instance.request<T>(axiosConfig);
+      return this.processResponse<T>(response);
     } catch (error) {
       return this.handleError<T>(error as AxlyError<T>);
     }
   }
 
-  // Shorthand methods
-  public get<T = any>(url: string, config?: AxlyRequestConfig) {
+  public get<T>(
+    url: string,
+    config?: AxlyRequestConfig,
+  ): Promise<AxlyResponse<T>> {
     return this.request<T>({ ...config, method: "GET", url });
   }
 
-  public post<T = any>(url: string, data?: any, config?: AxlyRequestConfig) {
+  public post<T>(
+    url: string,
+    data?: any,
+    config?: AxlyRequestConfig,
+  ): Promise<AxlyResponse<T>> {
     return this.request<T>({ ...config, method: "POST", url, data });
   }
 
-  // Add other HTTP methods (put, delete, etc)
+  public put<T>(
+    url: string,
+    data?: any,
+    config?: AxlyRequestConfig,
+  ): Promise<AxlyResponse<T>> {
+    return this.request<T>({ ...config, method: "PUT", url, data });
+  }
+
+  public delete<T>(
+    url: string,
+    config?: AxlyRequestConfig,
+  ): Promise<AxlyResponse<T>> {
+    return this.request<T>({ ...config, method: "DELETE", url });
+  }
+
+  public patch<T>(
+    url: string,
+    data?: any,
+    config?: AxlyRequestConfig,
+  ): Promise<AxlyResponse<T>> {
+    return this.request<T>({ ...config, method: "PATCH", url, data });
+  }
 
   private async processRequestConfig(
     config: AxlyRequestConfig,
@@ -64,9 +127,16 @@ export class AxlyClient {
   }
 
   private async processResponse<T>(
-    response: AxlyResponse<T>,
+    response: AxiosResponse<T>,
   ): Promise<AxlyResponse<T>> {
-    let processedResponse = response;
+    let processedResponse: AxlyResponse<T> = {
+      data: response.data,
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers as Record<string, string>,
+      config: response.config as AxlyRequestConfig,
+    };
+
     for (const middleware of this.middlewares) {
       if (middleware.onResponse) {
         processedResponse = await middleware.onResponse(processedResponse);
@@ -75,11 +145,13 @@ export class AxlyClient {
     return processedResponse;
   }
 
-  private handleError<T>(error: AxlyError<T>): never {
+  private async handleError<T>(error: AxlyError<T>): Promise<never> {
     let processedError = error;
     for (const middleware of this.middlewares) {
       if (middleware.onError) {
-        processedError = middleware.onError(processedError) as AxlyError<T>;
+        processedError = (await middleware.onError(
+          processedError,
+        )) as AxlyError<T>;
       }
     }
     throw processedError;
@@ -96,5 +168,9 @@ export class AxlyClient {
       };
     }
     return config;
+  }
+
+  public get axiosInstance(): AxiosInstance {
+    return this.instance;
   }
 }
