@@ -10,10 +10,15 @@
   },
   "scripts": {
     "build": "tsc",
+    "lint": "eslint . --fix",
     "watch": "tsc --watch",
     "release": "npm version patch && npm publish --access public --tag latest",
     "prettier:check": "prettier -c .",
-    "prettier": "prettier -w -u ."
+    "prettier": "prettier -w -u .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "**/*": "prettier -w -u ."
   },
   "license": "MIT",
   "homepage": "https://www.npmjs.com/package/axly",
@@ -38,10 +43,18 @@
     "url": "https://github.com/Harshalkatakiya"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@harshalkatakiya/prettier-config": "^1.0.16",
     "@types/node": "^22.10.9",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "globals": "^15.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.2",
     "prettier": "^3.4.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.21.0"
   },
   "keywords": [
     "http",
@@ -58,6 +71,7 @@
     "retry-logic"
   ],
   "dependencies": {
-    "axios": "^1.7.9"
+    "axios": "^1.7.9",
+    "socket.io-client": "^4.8.1"
   }
 }

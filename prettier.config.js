@@ -1,4 +1,4 @@
-import baseConfig from "@harshalkatakiya/prettier-config";
+import baseConfig from '@harshalkatakiya/prettier-config';
 
 /**
  * @see https://prettier.io/docs/en/configuration.html
