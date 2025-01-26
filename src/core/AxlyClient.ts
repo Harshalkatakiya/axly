@@ -1,10 +1,9 @@
 import axios, {
+  AxiosHeaders,
   AxiosInstance,
   AxiosProgressEvent,
   AxiosResponse,
-  InternalAxiosRequestConfig,
 } from "axios";
-import { setupProgress } from "./progress";
 import {
   AxlyError,
   AxlyMiddleware,
@@ -15,41 +14,25 @@ import {
 export class AxlyClient {
   private instance: AxiosInstance;
   private middlewares: AxlyMiddleware[] = [];
+  private headers: AxiosHeaders = new AxiosHeaders();
+  private uploadProgressPercentage: number = 0;
+  private downloadProgressPercentage: number = 0;
   constructor(baseConfig: AxlyRequestConfig = {}) {
     const axiosConfig = this.convertToAxiosConfig(baseConfig);
     this.instance = axios.create(axiosConfig);
   }
+  public get uploadProgress(): number {
+    return this.uploadProgressPercentage;
+  }
 
-  private convertToAxiosConfig(
-    config: AxlyRequestConfig,
-  ): InternalAxiosRequestConfig {
-    const {
-      headers: AxiosHeaders = {},
-      onUploadProgress,
-      onDownloadProgress,
-      ...restConfig
-    } = config;
-
-    return {
-      ...restConfig,
-      headers,
-      onUploadProgress: onUploadProgress
-        ? (progressEvent: AxiosProgressEvent) => {
-            const percent = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1),
-            );
-            onUploadProgress(percent);
-          }
-        : undefined,
-      onDownloadProgress: onDownloadProgress
-        ? (progressEvent: AxiosProgressEvent) => {
-            const percent = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1),
-            );
-            onDownloadProgress(percent);
-          }
-        : undefined,
-    };
+  public get downloadProgress(): number {
+    return this.downloadProgressPercentage;
+  }
+  private calculateProgress(progressEvent: AxiosProgressEvent): number {
+    if (!progressEvent.total) {
+      return 0; // Avoid division by zero
+    }
+    return Math.round((progressEvent.loaded * 100) / progressEvent.total);
   }
 
   public addMiddleware(middleware: AxlyMiddleware): void {
@@ -58,18 +41,28 @@ export class AxlyClient {
 
   public async request<T>(config: AxlyRequestConfig): Promise<AxlyResponse<T>> {
     try {
-      let processedConfig = await this.processRequestConfig(config);
-      processedConfig = this.mergeContentType(processedConfig);
-
-      if (
-        processedConfig.onUploadProgress ||
-        processedConfig.onDownloadProgress
-      ) {
-        setupProgress(processedConfig);
+      const { onUploadProgress, onDownloadProgress, ...axiosConfig } = config;
+      if (onUploadProgress) {
+        axiosConfig.onUploadProgress = (progressEvent: AxiosProgressEvent) => {
+          this.uploadProgressPercentage = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          );
+          onUploadProgress(this.uploadProgressPercentage);
+        };
+      }
+      if (onDownloadProgress) {
+        axiosConfig.onDownloadProgress = (
+          progressEvent: AxiosProgressEvent,
+        ) => {
+          this.downloadProgressPercentage = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          );
+          onDownloadProgress(this.downloadProgressPercentage);
+        };
       }
 
-      const axiosConfig = this.convertToAxiosConfig(processedConfig);
-      const response = await this.instance.request<T>(axiosConfig);
+      const response: AxiosResponse<T> =
+        await this.instance.request<T>(axiosConfig);
       return this.processResponse<T>(response);
     } catch (error) {
       return this.handleError<T>(error as AxlyError<T>);
