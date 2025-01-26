@@ -1,49 +1,34 @@
-interface CacheEntry<T> {
-  value: T;
-  timestamp: number;
-  ttl?: number;
-}
-
-export class CacheStorage<T = any> {
-  private storage: Map<string, CacheEntry<T>>;
-
+export class CacheStorage {
+  storage;
   constructor() {
     this.storage = new Map();
   }
-
-  get(key: string): T | null {
+  get(key) {
     const entry = this.storage.get(key);
     if (!entry) return null;
-
     if (entry.ttl && Date.now() - entry.timestamp > entry.ttl) {
       this.delete(key);
       return null;
     }
-
     return entry.value;
   }
-
-  set(key: string, value: T, ttl?: number): void {
+  set(key, value, ttl) {
     this.storage.set(key, {
       value,
       timestamp: Date.now(),
       ttl
     });
   }
-
-  delete(key: string): void {
+  delete(key) {
     this.storage.delete(key);
   }
-
-  clear(): void {
+  clear() {
     this.storage.clear();
   }
-
-  has(key: string): boolean {
+  has(key) {
     return this.storage.has(key);
   }
-
-  keys(): string[] {
+  keys() {
     return Array.from(this.storage.keys());
   }
 }

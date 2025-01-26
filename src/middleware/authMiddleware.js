@@ -1,12 +1,8 @@
 import axios from 'axios';
-import { AxionAuthConfig, AxionMiddleware } from '../core/types';
-
 /**
  * Handles authentication and token refresh
  */
-export const createAuthMiddleware = (
-  authConfig: AxionAuthConfig
-): AxionMiddleware => ({
+export const createAuthMiddleware = (authConfig) => ({
   onRequest: (config) => {
     if (authConfig.token) {
       config.headers = config.headers || {};
@@ -21,10 +17,8 @@ export const createAuthMiddleware = (
         const refreshResponse = await axios.post(authConfig.refreshTokenUrl, {
           refreshToken: authConfig.refreshToken
         });
-
         authConfig.token = refreshResponse.data.access_token;
         authConfig.onTokenRefresh?.(refreshResponse.data.access_token);
-
         error.config.headers[authConfig.tokenHeader || 'Authorization'] =
           `Bearer ${authConfig.token}`;
         return error.config;

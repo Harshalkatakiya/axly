@@ -1,35 +1,30 @@
-import { SocketIO } from './SocketIO';
-import { SocketConfig } from './types';
-
+import { SocketIO } from './SocketIO.js';
 export class SocketManager {
-  private instances: Map<string, SocketIO> = new Map();
-
-  constructor(private defaultConfig?: SocketConfig) {}
-
-  public create(name: string, config?: SocketConfig): SocketIO {
+  defaultConfig;
+  instances = new Map();
+  constructor(defaultConfig) {
+    this.defaultConfig = defaultConfig;
+  }
+  create(name, config) {
     const mergedConfig = { ...this.defaultConfig, ...config };
     const instance = new SocketIO(mergedConfig);
     this.instances.set(name, instance);
     return instance;
   }
-
-  public get(name: string): SocketIO | undefined {
+  get(name) {
     return this.instances.get(name);
   }
-
-  public remove(name: string): void {
+  remove(name) {
     const instance = this.instances.get(name);
     instance?.disconnect();
     this.instances.delete(name);
   }
-
-  public connectAll(): Promise<void[]> {
+  connectAll() {
     return Promise.all(
       Array.from(this.instances.values()).map((instance) => instance.connect())
     );
   }
-
-  public disconnectAll(): void {
+  disconnectAll() {
     this.instances.forEach((instance) => instance.disconnect());
   }
 }

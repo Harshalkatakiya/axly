@@ -1,33 +1,22 @@
-import axios, { AxiosInstance, AxiosResponse, CancelTokenSource } from 'axios';
+import axios from 'axios';
 import EventEmitter from 'events';
-import { SocketConfig } from 'socket';
-import { SocketIO } from '../socket/SocketIO';
-import { CacheStorage } from '../utils/cache';
-import { AxionError } from './AxionError';
-import {
-  AxionAuthConfig,
-  AxionFetchResult,
-  AxionMiddleware,
-  AxionPollingConfig,
-  AxionRateLimitConfig,
-  AxionRequestConfig
-} from './types';
-
-export class Axion extends EventEmitter {
-  private instance: AxiosInstance;
-  private cancelTokenSource: CancelTokenSource;
-  private middlewares: AxionMiddleware[];
-  private authConfig?: AxionAuthConfig;
-  private rateLimitConfig?: AxionRateLimitConfig;
-  private requestQueue: (() => void)[];
-  private cache: CacheStorage;
-  private pendingRequests: Map<string, Promise<AxiosResponse>>;
-  private isRefreshingToken: boolean;
-  private concurrency: number;
-  private activeRequests: number;
-  private socketIO?: SocketIO;
-
-  constructor(baseURL?: string, concurrency: number = 10) {
+import { SocketIO } from '../socket/SocketIO.js';
+import { CacheStorage } from '../utils/cache.js';
+import { AxlyError } from './axlyError.js';
+export class Axly extends EventEmitter {
+  instance;
+  cancelTokenSource;
+  middlewares;
+  authConfig;
+  rateLimitConfig;
+  requestQueue;
+  cache;
+  pendingRequests;
+  isRefreshingToken;
+  concurrency;
+  activeRequests;
+  socketIO;
+  constructor(baseURL, concurrency = 10) {
     super();
     this.instance = axios.create({ baseURL });
     this.cancelTokenSource = axios.CancelToken.source();
@@ -38,18 +27,16 @@ export class Axion extends EventEmitter {
     this.isRefreshingToken = false;
     this.concurrency = concurrency;
     this.activeRequests = 0;
-
     this.setupInterceptors();
   }
-
-  private setupInterceptors(): void {
+  setupInterceptors() {
     // Request Interceptor
     this.instance.interceptors.request.use(
       async (config) => {
         this.emit('request-start', config);
         for (const middleware of this.middlewares) {
           if (middleware.onRequest) {
-            config = await middleware.onRequest(config as AxionRequestConfig);
+            config = await middleware.onRequest(config);
           }
         }
         if (this.authConfig?.token) {
@@ -67,7 +54,6 @@ export class Axion extends EventEmitter {
         return Promise.reject(error);
       }
     );
-
     // Response Interceptor
     this.instance.interceptors.response.use(
       async (response) => {
@@ -91,7 +77,7 @@ export class Axion extends EventEmitter {
           if (middleware.onError) error = await middleware.onError(error);
         }
         return Promise.reject(
-          new AxionError(
+          new AxlyError(
             error.message,
             error.code,
             error.response?.status,
@@ -102,11 +88,7 @@ export class Axion extends EventEmitter {
       }
     );
   }
-
-  private async handleTokenRefresh(error: {
-    config: AxionRequestConfig;
-    response?: AxiosResponse;
-  }): Promise<AxiosResponse> {
+  async handleTokenRefresh(error) {
     if (this.isRefreshingToken) {
       return new Promise((resolve, reject) => {
         this.requestQueue.push(() => {
@@ -114,19 +96,16 @@ export class Axion extends EventEmitter {
         });
       });
     }
-
     this.isRefreshingToken = true;
     try {
       const response = await this.instance.post(
-        this.authConfig!.refreshTokenUrl!,
-        { refreshToken: this.authConfig!.refreshToken }
+        this.authConfig.refreshTokenUrl,
+        { refreshToken: this.authConfig.refreshToken }
       );
-
-      this.authConfig!.token = response.data.token;
-      this.authConfig!.onTokenRefresh?.(response.data.token);
+      this.authConfig.token = response.data.token;
+      this.authConfig.onTokenRefresh?.(response.data.token);
       this.isRefreshingToken = false;
       this.processRequestQueue();
-
       return this.instance(error.config);
     } catch (refreshError) {
       this.isRefreshingToken = false;
@@ -134,8 +113,7 @@ export class Axion extends EventEmitter {
       throw refreshError;
     }
   }
-
-  private processRequestQueue(): void {
+  processRequestQueue() {
     while (
       this.requestQueue.length > 0 &&
       this.activeRequests < this.concurrency
@@ -144,10 +122,7 @@ export class Axion extends EventEmitter {
       request?.();
     }
   }
-
-  public async request<T = any>(
-    config: AxionRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async request(config) {
     const {
       retries = 3,
       retryDelay = 1000,
@@ -156,38 +131,30 @@ export class Axion extends EventEmitter {
       deduplicate = false,
       ...axiosConfig
     } = config;
-
     if (cache && cacheKey && this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey)!;
+      return this.cache.get(cacheKey);
     }
-
     if (deduplicate && cacheKey && this.pendingRequests.has(cacheKey)) {
-      return this.pendingRequests.get(cacheKey)!;
+      return this.pendingRequests.get(cacheKey);
     }
-
-    const retryRequest = async (attempt: number): Promise<AxiosResponse<T>> => {
+    const retryRequest = async (attempt) => {
       try {
-        const requestPromise = this.instance.request<T>({
+        const requestPromise = this.instance.request({
           ...axiosConfig,
           cancelToken: this.cancelTokenSource.token
         });
-
         if (deduplicate && cacheKey) {
           this.pendingRequests.set(cacheKey, requestPromise);
         }
-
         this.activeRequests++;
         const response = await requestPromise;
         this.activeRequests--;
-
         if (cache && cacheKey) {
           this.cache.set(cacheKey, response);
         }
-
         if (deduplicate && cacheKey) {
           this.pendingRequests.delete(cacheKey);
         }
-
         this.processRequestQueue();
         return response;
       } catch (error) {
@@ -201,56 +168,43 @@ export class Axion extends EventEmitter {
         throw error;
       }
     };
-
     return retryRequest(0);
   }
-
-  public async fetch<T = any>(
-    config: AxionRequestConfig
-  ): Promise<AxionFetchResult<T>> {
-    const result: AxionFetchResult<T> = {
+  async fetch(config) {
+    const result = {
       data: null,
       isLoading: true,
       error: null,
       response: null
     };
-
     try {
-      const response = await this.request<T>(config);
+      const response = await this.request(config);
       result.data = response.data;
       result.response = response;
     } catch (error) {
-      result.error = error as Error;
+      result.error = error;
     } finally {
       result.isLoading = false;
     }
-
     return result;
   }
-
   // Additional methods (batchRequests, poll, etc.)
-  public async batchRequests<T = any>(
-    requests: AxionRequestConfig[]
-  ): Promise<AxiosResponse<T>[]> {
-    const responses: AxiosResponse<T>[] = [];
+  async batchRequests(requests) {
+    const responses = [];
     for (const req of requests) {
-      const response = await this.request<T>(req);
+      const response = await this.request(req);
       responses.push(response);
     }
     return responses;
   }
-
-  public async poll<T = any>(
-    url: string,
-    config: AxionPollingConfig
-  ): Promise<AxiosResponse<T>> {
+  async poll(url, config) {
     let attempts = 0;
     while (true) {
-      const response = await this.request<T>({ url, ...config });
+      const response = await this.request({ url, ...config });
       attempts++;
       if (config.until?.(response)) return response;
       if (config.maxAttempts && attempts >= config.maxAttempts) {
-        throw new AxionError(
+        throw new AxlyError(
           'Max polling attempts reached',
           'POLLING_MAX_ATTEMPTS'
         );
@@ -258,49 +212,36 @@ export class Axion extends EventEmitter {
       await new Promise((resolve) => setTimeout(resolve, config.interval));
     }
   }
-
   // Configuration methods
-  public setBaseURL(baseURL: string): void {
+  setBaseURL(baseURL) {
     this.instance.defaults.baseURL = baseURL;
   }
-
-  public setHeader(name: string, value: string): void {
+  setHeader(name, value) {
     this.instance.defaults.headers.common[name] = value;
   }
-
-  public removeHeader(name: string): void {
+  removeHeader(name) {
     delete this.instance.defaults.headers.common[name];
   }
-
-  public addMiddleware(middleware: AxionMiddleware): void {
+  addMiddleware(middleware) {
     this.middlewares.push(middleware);
   }
-
-  public removeMiddleware(middleware: AxionMiddleware): void {
+  removeMiddleware(middleware) {
     this.middlewares = this.middlewares.filter((m) => m !== middleware);
   }
-
-  public setTimeout(timeout: number): void {
+  setTimeout(timeout) {
     this.instance.defaults.timeout = timeout;
   }
-
-  public setAuthConfig(authConfig: AxionAuthConfig): void {
+  setAuthConfig(authConfig) {
     this.authConfig = authConfig;
   }
-
-  public setRateLimitConfig(rateLimitConfig: AxionRateLimitConfig): void {
+  setRateLimitConfig(rateLimitConfig) {
     this.rateLimitConfig = rateLimitConfig;
   }
-
   // File handling methods
-  public async uploadFile<T = any>(
-    url: string,
-    file: File,
-    config?: AxionRequestConfig
-  ): Promise<AxiosResponse<T>> {
+  async uploadFile(url, file, config) {
     const formData = new FormData();
     formData.append('file', file);
-    return this.request<T>({
+    return this.request({
       url,
       method: 'POST',
       data: formData,
@@ -308,42 +249,30 @@ export class Axion extends EventEmitter {
       ...config
     });
   }
-
-  public async downloadFile(
-    url: string,
-    config?: AxionRequestConfig
-  ): Promise<AxiosResponse<Blob>> {
-    return this.request<Blob>({
+  async downloadFile(url, config) {
+    return this.request({
       url,
       method: 'GET',
       responseType: 'blob',
       ...config
     });
   }
-
   // Socket.IO methods
-  public connectSocketIO(url: string, options?: Partial<SocketConfig>): void {
+  connectSocketIO(url, options) {
     this.socketIO = new SocketIO({ url, options });
     this.socketIO.connect();
   }
-
-  public disconnectSocketIO(): void {
+  disconnectSocketIO() {
     this.socketIO?.disconnect();
   }
-
-  public onSocketEvent<T = any>(
-    event: string,
-    listener: (data: T) => void
-  ): void {
+  onSocketEvent(event, listener) {
     this.socketIO?.on(event, listener);
   }
-
-  public emitSocketEvent<T = any>(event: string, data: T): void {
+  emitSocketEvent(event, data) {
     this.socketIO?.emit(event, data);
   }
-
   // Cleanup
-  public cancelRequest(message?: string): void {
+  cancelRequest(message) {
     this.cancelTokenSource.cancel(message);
   }
 }

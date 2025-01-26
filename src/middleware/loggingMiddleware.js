@@ -1,9 +1,7 @@
-import { AxionMiddleware } from '../core/types';
-
 /**
  * Logs request lifecycle events
  */
-export const loggingMiddleware: AxionMiddleware = {
+export const loggingMiddleware = {
   onRequest: (config) => {
     console.log(`[Request] ${config.method?.toUpperCase()} ${config.url}`);
     return config;

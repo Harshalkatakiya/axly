@@ -1,7 +1,5 @@
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import typescriptEslint from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 import prettierPlugin from 'eslint-plugin-prettier';
 import globals from 'globals';
 import path from 'path';
@@ -19,38 +17,33 @@ const compat = new FlatCompat({
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   {
-    files: ['./src/**/*.{js,mjs,cjs,ts}'],
+    files: ['./src/**/*.{js,mjs,cjs}'],
     ignores: ['dist/**', 'node_modules/**'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      parser: tsParser,
-      globals: { ...globals.browser, ...globals.node },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        FormData: 'readonly',
+        URLSearchParams: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly'
+      },
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
-        extraFileExtensions: ['.js', '.mjs', '.ts', '.tsx'],
-        tsconfigRootDir: __dirname,
-        project: './tsconfig.json'
+        extraFileExtensions: ['.js', '.mjs']
       }
     },
-    plugins: {
-      typescriptEslint,
-      prettierPlugin
-    },
+    plugins: [prettierPlugin],
     rules: {
       'prettier/prettier': 'error',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_' }
-      ]
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
     }
   },
   ...compat.extends(
     'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
     'plugin:prettier/recommended',
     'eslint-config-prettier'
   )

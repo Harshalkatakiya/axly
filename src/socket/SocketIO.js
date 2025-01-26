@@ -1,93 +1,72 @@
-import { Manager, Socket } from 'socket.io-client';
-import { SocketConfig, SocketEventCallback, SocketMiddleware } from './types';
-
+import { Manager } from 'socket.io-client';
 export class SocketIO {
-  private manager: Manager;
-  private socket: Socket;
-  private middlewares: SocketMiddleware[] = [];
-  private connectionPromise?: Promise<void>;
-
-  constructor(private config: SocketConfig) {
+  config;
+  manager;
+  socket;
+  middlewares = [];
+  connectionPromise;
+  constructor(config) {
+    this.config = config;
     this.manager = new Manager(config.url, config.options);
     this.socket = this.manager.socket(config.namespace || '/');
     this.setupDefaultListeners();
   }
-
-  private setupDefaultListeners() {
+  setupDefaultListeners() {
     this.socket.on('connect', () => {
       this.config.onConnect?.();
       this.emitStatus('connected');
     });
-
     this.socket.on('disconnect', (reason) => {
       this.config.onDisconnect?.(reason);
       this.emitStatus('disconnected');
     });
-
     this.socket.on('error', (error) => {
       this.config.onError?.(error);
       this.emitStatus('error');
     });
-
     this.socket.on('reconnect_attempt', (attempt) => {
       this.config.onReconnect?.(attempt);
       this.emitStatus('reconnecting');
     });
   }
-
-  private emitStatus(
-    status:
-      | 'connecting'
-      | 'connected'
-      | 'disconnected'
-      | 'error'
-      | 'reconnecting'
-  ) {
+  emitStatus(status) {
     this.config.onStatusChange?.(status);
   }
-
-  private async processMiddlewares(event: string, args: any[]) {
+  async processMiddlewares(event, args) {
     for (const middleware of this.middlewares) {
       if (middleware[event]) {
-        args = await middleware[event]!(...args);
+        args = await middleware[event](...args);
       }
     }
     return args;
   }
-
-  public connect(): Promise<void> {
+  connect() {
     if (!this.connectionPromise) {
       this.connectionPromise = new Promise((resolve, reject) => {
         if (this.socket.connected) return resolve();
-
         const timeout = setTimeout(
           () => reject(new Error('Connection timeout')),
           this.config.timeout || 5000
         );
-
         this.socket.once('connect', () => {
           clearTimeout(timeout);
           resolve();
         });
-
         this.socket.once('connect_error', (error) => {
           clearTimeout(timeout);
           reject(error);
         });
-
         this.socket.connect();
       });
     }
     return this.connectionPromise;
   }
-
-  public disconnect() {
+  disconnect() {
     this.socket.disconnect();
     this.connectionPromise = undefined;
   }
-
-  public on<T = any>(event: string, callback: SocketEventCallback<T>) {
-    this.socket.on(event, async (...args: any[]) => {
+  on(event, callback) {
+    this.socket.on(event, async (...args) => {
       try {
         const processedArgs = await this.processMiddlewares(event, args);
         callback(...processedArgs);
@@ -96,14 +75,12 @@ export class SocketIO {
       }
     });
   }
-
-  public off(event: string) {
+  off(event) {
     this.socket.off(event);
   }
-
-  public async emit<T = any>(event: string, ...args: any[]): Promise<T> {
+  async emit(event, ...args) {
     return new Promise((resolve, reject) => {
-      this.socket.emit(event, ...args, (response: T | Error) => {
+      this.socket.emit(event, ...args, (response) => {
         if (response instanceof Error) {
           reject(response);
         } else {
@@ -112,20 +89,16 @@ export class SocketIO {
       });
     });
   }
-
-  public addMiddleware(middleware: SocketMiddleware) {
+  addMiddleware(middleware) {
     this.middlewares.push(middleware);
   }
-
-  public getSocket(): Socket {
+  getSocket() {
     return this.socket;
   }
-
-  public getNamespace(): string {
+  getNamespace() {
     return this.socket.nsp;
   }
-
-  public getStatus(): 'connected' | 'disconnected' | 'connecting' {
+  getStatus() {
     return (
       this.socket.connected ? 'connected'
       : this.socket.active ? 'connecting'

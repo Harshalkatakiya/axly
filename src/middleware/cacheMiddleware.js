@@ -1,9 +1,7 @@
-import { AxionMiddleware } from '../core/types';
-
 /**
  * Implements request caching
  */
-export const cacheMiddleware: AxionMiddleware = {
+export const cacheMiddleware = {
   onRequest: (config) => {
     if (config.cache && config.cacheKey) {
       const cachedResponse = cache.get(config.cacheKey);
@@ -20,6 +18,5 @@ export const cacheMiddleware: AxionMiddleware = {
     return response;
   }
 };
-
 // Simple in-memory cache (replace with Redis/other storage in production)
 const cache = new Map();

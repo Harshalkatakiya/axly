@@ -1,6 +1,4 @@
-import { AxionRequestConfig } from '../core/types';
-
-export function formatFormData(data: Record<string, any>): FormData {
+export function formatFormData(data) {
   const formData = new FormData();
   Object.entries(data).forEach(([key, value]) => {
     if (Array.isArray(value)) {
@@ -11,10 +9,8 @@ export function formatFormData(data: Record<string, any>): FormData {
   });
   return formData;
 }
-
-export function buildQueryString(params: Record<string, any>): string {
+export function buildQueryString(params) {
   const searchParams = new URLSearchParams();
-
   Object.entries(params).forEach(([key, value]) => {
     if (Array.isArray(value)) {
       value.forEach((item) => searchParams.append(key, item));
@@ -22,14 +18,9 @@ export function buildQueryString(params: Record<string, any>): string {
       searchParams.append(key, value);
     }
   });
-
   return searchParams.toString();
 }
-
-export function mergeConfigs(
-  baseConfig: AxionRequestConfig,
-  newConfig: AxionRequestConfig
-): AxionRequestConfig {
+export function mergeConfigs(baseConfig, newConfig) {
   return {
     ...baseConfig,
     ...newConfig,
@@ -43,7 +34,6 @@ export function mergeConfigs(
     }
   };
 }
-
-export function isPlainObject(value: unknown): boolean {
+export function isPlainObject(value) {
   return Object.prototype.toString.call(value) === '[object Object]';
 }
