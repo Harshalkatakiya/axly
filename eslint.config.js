@@ -20,7 +20,7 @@ const compat = new FlatCompat({
 export default [
   {
     files: ["./src/**/*.{js,mjs,cjs,ts}"],
-    ignores: ["dist/**", "node_modules/**"],
+    ignores: ["dist", "node_modules"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -41,7 +41,6 @@ export default [
     rules: {
       "prettier/prettier": "error",
       "@typescript-eslint/explicit-function-return-type": "off",
-      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
@@ -54,4 +53,9 @@ export default [
     "plugin:prettier/recommended",
     "eslint-config-prettier",
   ),
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ];

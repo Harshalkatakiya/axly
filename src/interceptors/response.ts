@@ -2,16 +2,19 @@ import { AxiosResponse } from "axios";
 import { ApiResponse } from "../types/index.js";
 
 export const responseInterceptor = (
-  successToast: boolean,
+  successToast: boolean = false,
   customToastMessage?: string,
-  customToastMessageType?: string,
+  customToastMessageType: "success" | "error" | "warning" = "success",
+  toastHandler?: (
+    message: string,
+    type: "success" | "error" | "warning",
+  ) => void,
 ) => {
   return (response: AxiosResponse<ApiResponse>) => {
     if (successToast) {
-      if (customToastMessage) {
-        // Toast(customToastMessage, customToastMessageType);
-      } else if (response.data.message) {
-        // Toast(response.data.message, 'success');
+      const message = customToastMessage || response.data.message;
+      if (message && toastHandler) {
+        toastHandler(message, customToastMessageType);
       }
     }
     return response;
