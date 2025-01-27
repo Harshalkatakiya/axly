@@ -1,2 +1,4 @@
-export { default as AxlyClient } from "./AxlyClient.js";
+import AxlyClient from "./AxlyClient.js";
+
+export default AxlyClient;
 export * from "./types/index.js";

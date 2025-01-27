@@ -9,13 +9,10 @@ import { isEmpty } from "./utils/index.js";
 class AxlyClient {
   private token: string | null = null;
   private cancelTokenSource = axios.CancelToken.source();
-
   constructor(private baseURL?: string) {}
-
   setToken(token: string) {
     this.token = token;
   }
-
   async request<T = any>(
     options: RequestOptions,
   ): Promise<AxiosResponse<ApiResponse<T>>> {
@@ -40,7 +37,6 @@ class AxlyClient {
       cancelable = false,
       onCancel,
     } = options;
-
     const instance = axios.create({
       baseURL: baseURL || this.baseURL,
       headers: {
@@ -48,7 +44,6 @@ class AxlyClient {
         ...customHeaders,
       },
     });
-
     instance.interceptors.request.use(
       requestInterceptor(
         this.token,
@@ -65,7 +60,6 @@ class AxlyClient {
       ),
       responseInterceptor(errorToast, customErrorToastMessage, "error"),
     );
-
     try {
       const response = await instance({
         method,
