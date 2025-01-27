@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import AxlyClient from "../AxlyClient.js";
 import { AxlyError, RequestOptions } from "../types/index.js";
 
-export const useAxly = <T = any>(options: RequestOptions) => {
+const useAxly = <T = any>(options: RequestOptions) => {
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxlyError | null>(null);
@@ -52,3 +52,5 @@ export const useAxly = <T = any>(options: RequestOptions) => {
     cancelRequest,
   };
 };
+
+export default useAxly;

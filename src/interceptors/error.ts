@@ -1,5 +1,5 @@
 import { AxiosError } from "axios";
-import { ApiResponse, AxlyError } from "types";
+import { ApiResponse, AxlyError } from "../types/index.js";
 
 export const errorInterceptor = (
   errorToast: boolean = false,
