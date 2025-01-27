@@ -1,4 +1,2 @@
-export * from "./core/AxlyClient";
-export * from "./core/types";
-export * from "./helpers/fileHelpers";
-export * from "./react/useAxly";
+export { default as AxlyClient } from "./AxlyClient.js";
+export * from "./types/index.js";
