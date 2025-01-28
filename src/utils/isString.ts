@@ -4,6 +4,6 @@
  * @param {any} value - The value to check.
  * @returns {boolean} - Returns true if the value is a string, otherwise false.
  */
-const isString = (value: any): boolean => typeof value === "string";
+const isString = (value: unknown): value is string => typeof value === "string";
 
 export default isString;

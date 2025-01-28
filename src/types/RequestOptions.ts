@@ -1,13 +1,13 @@
 import { AxiosRequestConfig } from "axios";
 
-export interface RequestOptions {
+export interface RequestOptions<T = unknown> {
   method: AxiosRequestConfig["method"];
-  data?: any;
+  data?: T;
   url: string;
   contentType?: string;
   customHeaders?: Record<string, string>;
   responseType?: AxiosRequestConfig["responseType"];
-  params?: Record<string, any>;
+  params?: Record<string, unknown>;
   baseURL?: string;
   toastHandler?: (
     message: string,
