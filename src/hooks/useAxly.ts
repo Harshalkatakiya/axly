@@ -1,3 +1,4 @@
+import { AxiosResponse } from "axios";
 import {
   DependencyList,
   useCallback,
@@ -6,13 +7,15 @@ import {
   useState,
 } from "react";
 import { client } from "../AxlyClient.js";
-import { AxlyError, RequestOptions } from "../types/index.js";
+import { ApiResponse, AxlyError, RequestOptions } from "../types/index.js";
 
 const useAxly = <T = any>(
   options: RequestOptions,
   deps: DependencyList = [],
 ) => {
-  const [data, setData] = useState<any | undefined>();
+  const [data, setData] = useState<
+    AxiosResponse<ApiResponse<T>> | T | undefined
+  >();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxlyError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
