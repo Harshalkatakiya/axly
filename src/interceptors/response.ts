@@ -11,9 +11,9 @@ export const responseInterceptor = (
   ) => void,
 ) => {
   return (response: AxiosResponse<ApiResponse>) => {
-    if (successToast) {
+    if (successToast && toastHandler) {
       const message = customToastMessage || response.data.message;
-      if (message && toastHandler) {
+      if (message) {
         toastHandler(message, customToastMessageType);
       }
     }

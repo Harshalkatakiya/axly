@@ -1,8 +1,8 @@
 import { AxiosRequestConfig } from "axios";
 
-export interface RequestOptions<T = unknown> {
+export interface RequestOptions {
   method: AxiosRequestConfig["method"];
-  data?: T;
+  data?: any;
   url: string;
   contentType?: string;
   customHeaders?: Record<string, string>;

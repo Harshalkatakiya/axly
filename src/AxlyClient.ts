@@ -39,9 +39,18 @@ class AxlyClient {
   ): void {
     this.toastHandler = toastHandler;
   }
-  async request<T = any>(
-    options: RequestOptions,
-  ): Promise<AxiosResponse<ApiResponse<T>>> {
+  private createProgressHandler(
+    onProgress?: (progress: number) => void,
+  ): ((progressEvent: any) => void) | undefined {
+    if (!onProgress) return undefined;
+    return (progressEvent: any) => {
+      const percentCompleted = Math.round(
+        (progressEvent.loaded * 100) / (progressEvent.total || 1),
+      );
+      onProgress(percentCompleted);
+    };
+  }
+  async request(options: RequestOptions): Promise<AxiosResponse<ApiResponse>> {
     const {
       method = "GET",
       data,
@@ -94,22 +103,12 @@ class AxlyClient {
         url,
         params,
         responseType: responseType || "json",
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / (progressEvent.total || 1),
-          );
-          if (onUploadProgress) onUploadProgress(percentCompleted);
-        },
-        onDownloadProgress: (progressEvent) => {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / (progressEvent.total || 1),
-          );
-          if (onDownloadProgress) onDownloadProgress(percentCompleted);
-        },
+        onUploadProgress: this.createProgressHandler(onUploadProgress),
+        onDownloadProgress: this.createProgressHandler(onDownloadProgress),
       });
       return response;
     } catch (error) {
-      const axiosError = error as AxiosError<ApiResponse<T>>;
+      const axiosError = error as AxiosError<ApiResponse>;
       if (axios.isCancel(error)) {
         if (onCancel) onCancel();
         throw new AxlyError("Request canceled", "CANCELED");

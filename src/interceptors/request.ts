@@ -6,10 +6,8 @@ export const requestInterceptor = (
   cancelTokenSource: CancelTokenSource,
 ) => {
   return async (config: InternalAxiosRequestConfig) => {
-    if (token) {
-      if (config.headers) {
-        config.headers["Authorization"] = `Bearer ${token}`;
-      }
+    if (token && config.headers) {
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
     if (cancelable) {
       config.cancelToken = cancelTokenSource.token;
