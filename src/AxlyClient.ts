@@ -1,47 +1,36 @@
 import axios, { AxiosError, AxiosResponse, CancelTokenSource } from "axios";
+import isEmpty from "utils/isEmpty.js";
 import {
   errorInterceptor,
   requestInterceptor,
   responseInterceptor,
 } from "./interceptors/index.js";
 import { ApiResponse, AxlyError, RequestOptions } from "./types/index.js";
-import { isEmpty } from "./utils/index.js";
 
 class AxlyClient {
   private static instance: AxlyClient | null = null;
   private token: string | null = null;
   private cancelTokenSource: CancelTokenSource = axios.CancelToken.source();
   private baseURL: string;
-  private concurrentRequests: number = 0;
-  private maxConcurrentRequests: number = 10;
   private toastHandler?: (
     message: string,
     type: "success" | "error" | "warning",
   ) => void;
-
   private constructor(baseURL: string = "") {
     this.baseURL = baseURL;
   }
-
   static getInstance(baseURL: string = ""): AxlyClient {
     if (!AxlyClient.instance) {
       AxlyClient.instance = new AxlyClient(baseURL);
     }
     return AxlyClient.instance;
   }
-
   setToken(token: string): void {
     this.token = token;
   }
-
   setBaseURL(baseURL: string): void {
     this.baseURL = baseURL;
   }
-
-  setMaxConcurrentRequests(max: number): void {
-    this.maxConcurrentRequests = max;
-  }
-
   setToastHandler(
     toastHandler: (
       message: string,
@@ -50,16 +39,9 @@ class AxlyClient {
   ): void {
     this.toastHandler = toastHandler;
   }
-
   async request<T = any>(
     options: RequestOptions,
   ): Promise<AxiosResponse<ApiResponse<T>>> {
-    if (this.concurrentRequests >= this.maxConcurrentRequests) {
-      throw new AxlyError("Too many concurrent requests", "CONCURRENCY_LIMIT");
-    }
-
-    this.concurrentRequests++;
-
     const {
       method = "GET",
       data,
@@ -78,12 +60,9 @@ class AxlyClient {
       customErrorToastMessageType = "error",
       onUploadProgress,
       onDownloadProgress,
-      timeout = 100000,
-      retry = 0,
       cancelable = false,
       onCancel,
     } = options;
-
     const instance = axios.create({
       baseURL: baseURL || this.baseURL,
       headers: {
@@ -91,16 +70,9 @@ class AxlyClient {
         ...customHeaders,
       },
     });
-
     instance.interceptors.request.use(
-      requestInterceptor(
-        this.token,
-        this.cancelTokenSource,
-        timeout,
-        cancelable,
-      ),
+      requestInterceptor(this.token, cancelable, this.cancelTokenSource),
     );
-
     instance.interceptors.response.use(
       responseInterceptor(
         successToast,
@@ -115,7 +87,6 @@ class AxlyClient {
         requestToastHandler || this.toastHandler,
       ),
     );
-
     try {
       const response = await instance({
         method,
@@ -136,14 +107,8 @@ class AxlyClient {
           if (onDownloadProgress) onDownloadProgress(percentCompleted);
         },
       });
-
-      this.concurrentRequests--;
       return response;
     } catch (error) {
-      this.concurrentRequests--;
-      if (retry > 0) {
-        return this.request({ ...options, retry: retry - 1 });
-      }
       const axiosError = error as AxiosError<ApiResponse<T>>;
       if (axios.isCancel(error)) {
         if (onCancel) onCancel();
@@ -156,7 +121,6 @@ class AxlyClient {
       );
     }
   }
-
   cancelRequest(message: string = "Request canceled by the user"): void {
     this.cancelTokenSource.cancel(message);
     this.cancelTokenSource = axios.CancelToken.source();

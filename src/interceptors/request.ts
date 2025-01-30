@@ -1,19 +1,16 @@
-import { InternalAxiosRequestConfig } from "axios";
-import { isEmpty, isString } from "../utils/index.js";
+import { CancelTokenSource, InternalAxiosRequestConfig } from "axios";
 
 export const requestInterceptor = (
   token: string | null,
-  cancelTokenSource: any,
-  timeout: number,
   cancelable: boolean,
+  cancelTokenSource: CancelTokenSource,
 ) => {
   return async (config: InternalAxiosRequestConfig) => {
-    if (isString(token) && !isEmpty(token)) {
+    if (token) {
       if (config.headers) {
         config.headers["Authorization"] = `Bearer ${token}`;
       }
     }
-    config.timeout = timeout;
     if (cancelable) {
       config.cancelToken = cancelTokenSource.token;
     }

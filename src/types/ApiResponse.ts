@@ -3,5 +3,4 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   statusCode?: number;
   success?: boolean;
-  timestamp?: string;
 }

@@ -18,11 +18,9 @@ export interface RequestOptions<T = unknown> {
   customToastMessage?: string;
   customErrorToastMessage?: string;
   customToastMessageType?: "success" | "error" | "warning";
-  customErrorToastMessageType: "error" | "warning";
+  customErrorToastMessageType?: "error" | "warning";
   onUploadProgress?: (progress: number) => void;
   onDownloadProgress?: (progress: number) => void;
-  timeout?: number;
-  retry?: number;
   cancelable?: boolean;
   onCancel?: () => void;
 }
