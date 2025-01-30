@@ -8,6 +8,7 @@ import { ApiResponse, AxlyError, RequestOptions } from "./types/index.js";
 import { isEmpty } from "./utils/index.js";
 
 class AxlyClient {
+  private static instance: AxlyClient | null = null;
   private token: string | null = null;
   private cancelTokenSource: CancelTokenSource = axios.CancelToken.source();
   private baseURL: string;
@@ -17,15 +18,30 @@ class AxlyClient {
     message: string,
     type: "success" | "error" | "warning",
   ) => void;
-  constructor(baseURL: string = "") {
+
+  private constructor(baseURL: string = "") {
     this.baseURL = baseURL;
   }
+
+  static getInstance(baseURL: string = ""): AxlyClient {
+    if (!AxlyClient.instance) {
+      AxlyClient.instance = new AxlyClient(baseURL);
+    }
+    return AxlyClient.instance;
+  }
+
   setToken(token: string): void {
     this.token = token;
   }
+
+  setBaseURL(baseURL: string): void {
+    this.baseURL = baseURL;
+  }
+
   setMaxConcurrentRequests(max: number): void {
     this.maxConcurrentRequests = max;
   }
+
   setToastHandler(
     toastHandler: (
       message: string,
@@ -34,13 +50,16 @@ class AxlyClient {
   ): void {
     this.toastHandler = toastHandler;
   }
+
   async request<T = any>(
     options: RequestOptions,
   ): Promise<AxiosResponse<ApiResponse<T>>> {
     if (this.concurrentRequests >= this.maxConcurrentRequests) {
       throw new AxlyError("Too many concurrent requests", "CONCURRENCY_LIMIT");
     }
+
     this.concurrentRequests++;
+
     const {
       method = "GET",
       data,
@@ -64,6 +83,7 @@ class AxlyClient {
       cancelable = false,
       onCancel,
     } = options;
+
     const instance = axios.create({
       baseURL: baseURL || this.baseURL,
       headers: {
@@ -71,6 +91,7 @@ class AxlyClient {
         ...customHeaders,
       },
     });
+
     instance.interceptors.request.use(
       requestInterceptor(
         this.token,
@@ -79,6 +100,7 @@ class AxlyClient {
         cancelable,
       ),
     );
+
     instance.interceptors.response.use(
       responseInterceptor(
         successToast,
@@ -93,6 +115,7 @@ class AxlyClient {
         requestToastHandler || this.toastHandler,
       ),
     );
+
     try {
       const response = await instance({
         method,
@@ -113,6 +136,7 @@ class AxlyClient {
           if (onDownloadProgress) onDownloadProgress(percentCompleted);
         },
       });
+
       this.concurrentRequests--;
       return response;
     } catch (error) {
@@ -132,10 +156,12 @@ class AxlyClient {
       );
     }
   }
+
   cancelRequest(message: string = "Request canceled by the user"): void {
     this.cancelTokenSource.cancel(message);
     this.cancelTokenSource = axios.CancelToken.source();
   }
 }
 
+export const client = AxlyClient.getInstance();
 export default AxlyClient;
