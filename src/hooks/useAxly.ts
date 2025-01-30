@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { client } from "../AxlyClient.js";
-import { ApiResponse, AxlyError, RequestOptions } from "../types/index.js";
+import { AxlyError, RequestOptions } from "../types/index.js";
 
 const useAxly = <T = any>(
   options: RequestOptions,
@@ -21,15 +21,12 @@ const useAxly = <T = any>(
     setIsLoading(true);
     setError(null);
     try {
-      const response = await client.request<ApiResponse<T>>({
+      const response = await client.request<T>({
         ...options,
         onUploadProgress: setUploadProgress,
         onDownloadProgress: setDownloadProgress,
       });
-      // eslint-disable-next-line
-      console.log("API Response: ", response);
-      // eslint-disable-next-line
-      setData((response?.data as any) || null);
+      setData(response.data?.data ?? null);
     } catch (err) {
       setError(
         err instanceof AxlyError
