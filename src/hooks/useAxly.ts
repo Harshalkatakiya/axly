@@ -6,13 +6,13 @@ import {
   useState,
 } from "react";
 import { client } from "../AxlyClient.js";
-import { ApiResponse, AxlyError, RequestOptions } from "../types/index.js";
+import { AxlyError, RequestOptions } from "../types/index.js";
 
 const useAxly = <T = any>(
   options: RequestOptions,
   deps: DependencyList = [],
 ) => {
-  const [data, setData] = useState<ApiResponse<T> | undefined>();
+  const [data, setData] = useState<any | undefined>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxlyError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -26,7 +26,7 @@ const useAxly = <T = any>(
         onUploadProgress: setUploadProgress,
         onDownloadProgress: setDownloadProgress,
       });
-      setData(response.data);
+      setData(response);
     } catch (err) {
       setError(
         err instanceof AxlyError
