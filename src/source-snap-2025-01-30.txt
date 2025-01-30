@@ -1,0 +1,405 @@
+// AxlyClient.ts
+import axios, { AxiosError, AxiosResponse, CancelTokenSource } from "axios";
+import {
+  errorInterceptor,
+  requestInterceptor,
+  responseInterceptor,
+} from "./interceptors/index.js";
+import { ApiResponse, AxlyError, RequestOptions } from "./types/index.js";
+import { isEmpty } from "./utils/index.js";
+
+class AxlyClient {
+  private static instance: AxlyClient | null = null;
+  private token: string | null = null;
+  private cancelTokenSource: CancelTokenSource = axios.CancelToken.source();
+  private baseURL: string;
+  private toastHandler?: (
+    message: string,
+    type: "success" | "error" | "warning",
+  ) => void;
+  private constructor(baseURL: string = "") {
+    this.baseURL = baseURL;
+  }
+  static getInstance(baseURL: string = ""): AxlyClient {
+    if (!AxlyClient.instance) {
+      AxlyClient.instance = new AxlyClient(baseURL);
+    }
+    return AxlyClient.instance;
+  }
+  setToken(token: string): void {
+    this.token = token;
+  }
+  setBaseURL(baseURL: string): void {
+    this.baseURL = baseURL;
+  }
+  setToastHandler(
+    toastHandler: (
+      message: string,
+      type: "success" | "error" | "warning",
+    ) => void,
+  ): void {
+    this.toastHandler = toastHandler;
+  }
+  async request<T = any>(
+    options: RequestOptions,
+  ): Promise<AxiosResponse<ApiResponse<T>>> {
+    const {
+      method = "GET",
+      data,
+      url,
+      contentType,
+      customHeaders,
+      responseType,
+      params,
+      baseURL,
+      toastHandler: requestToastHandler,
+      successToast = false,
+      errorToast = false,
+      customToastMessage,
+      customErrorToastMessage,
+      customToastMessageType = "success",
+      customErrorToastMessageType = "error",
+      onUploadProgress,
+      onDownloadProgress,
+      cancelable = false,
+      onCancel,
+    } = options;
+    const instance = axios.create({
+      baseURL: baseURL || this.baseURL,
+      headers: {
+        "Content-Type": isEmpty(contentType) ? "application/json" : contentType,
+        ...customHeaders,
+      },
+    });
+    instance.interceptors.request.use(
+      requestInterceptor(this.token, cancelable, this.cancelTokenSource),
+    );
+    instance.interceptors.response.use(
+      responseInterceptor(
+        successToast,
+        customToastMessage,
+        customToastMessageType,
+        requestToastHandler || this.toastHandler,
+      ),
+      errorInterceptor(
+        errorToast,
+        customErrorToastMessage,
+        customErrorToastMessageType,
+        requestToastHandler || this.toastHandler,
+      ),
+    );
+    try {
+      const response = await instance({
+        method,
+        data,
+        url,
+        params,
+        responseType: responseType || "json",
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          );
+          if (onUploadProgress) onUploadProgress(percentCompleted);
+        },
+        onDownloadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          );
+          if (onDownloadProgress) onDownloadProgress(percentCompleted);
+        },
+      });
+      return response;
+    } catch (error) {
+      const axiosError = error as AxiosError<ApiResponse<T>>;
+      if (axios.isCancel(error)) {
+        if (onCancel) onCancel();
+        throw new AxlyError("Request canceled", "CANCELED");
+      }
+      throw new AxlyError(
+        axiosError.response?.data?.message || "An error occurred",
+        axiosError.response?.status?.toString() || "UNKNOWN_ERROR",
+        axiosError.response?.data,
+      );
+    }
+  }
+  cancelRequest(message: string = "Request canceled by the user"): void {
+    this.cancelTokenSource.cancel(message);
+    this.cancelTokenSource = axios.CancelToken.source();
+  }
+}
+
+export const client = AxlyClient.getInstance();
+export default AxlyClient;
+
+
+// hooks\useAxly.ts
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { client } from "../AxlyClient.js";
+import { AxlyError, RequestOptions } from "../types/index.js";
+
+const useAxly = <T = any>(options: RequestOptions) => {
+  const [data, setData] = useState<T | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<AxlyError | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await client.request<T>({
+        ...options,
+        onUploadProgress: (percentCompleted) => {
+          setUploadProgress(percentCompleted);
+        },
+        onDownloadProgress: (percentCompleted) => {
+          setDownloadProgress(percentCompleted);
+        },
+      });
+      setData(response.data?.data ?? null);
+    } catch (err) {
+      setError(
+        err instanceof AxlyError
+          ? err
+          : new AxlyError("An unexpected error occurred", "UNKNOWN_ERROR"),
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [options]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+  const cancelRequest = useCallback(() => {
+    client.cancelRequest();
+  }, []);
+  return useMemo(
+    () => ({
+      data,
+      isLoading,
+      error,
+      uploadProgress,
+      downloadProgress,
+      refetch: fetchData,
+      cancelRequest,
+    }),
+    [data, isLoading, error, uploadProgress, downloadProgress, fetchData],
+  );
+};
+
+export default useAxly;
+
+
+// index.ts
+/**
+ * @module Axly
+ * A modern HTTP client library with React integration
+ *
+ * @example
+ * // Configure client once
+ * import { client } from 'axly';
+ *
+ * client.setToken("your-auth-token");
+ * client.setBaseURL("https://api.example.com");
+ *
+ * @example
+ * // React hook usage
+ * import { useAxly } from 'axly';
+ *
+ * const { data } = useAxly({ url: "/data" });
+ */
+export { default as AxlyClient, client } from "./AxlyClient.js";
+export { default as useAxly } from "./hooks/useAxly.js";
+
+
+// interceptors\error.ts
+import { AxiosError } from "axios";
+import { ApiResponse, AxlyError } from "../types/index.js";
+
+export const errorInterceptor = (
+  errorToast: boolean = false,
+  customErrorToastMessage?: string,
+  customToastMessageType: "error" | "warning" = "error",
+  toastHandler?: (
+    message: string,
+    type: "success" | "error" | "warning",
+  ) => void,
+) => {
+  return (error: AxiosError<ApiResponse>) => {
+    if (errorToast && toastHandler) {
+      const message =
+        customErrorToastMessage ||
+        error.response?.data?.message ||
+        "An error occurred";
+      toastHandler(message, customToastMessageType);
+    }
+    throw new AxlyError(
+      error.response?.data?.message || "An error occurred",
+      error.response?.status?.toString() || "UNKNOWN_ERROR",
+      error.response?.data,
+    );
+  };
+};
+
+
+// interceptors\index.ts
+export * from "./error.js";
+export * from "./request.js";
+export * from "./response.js";
+
+
+// interceptors\request.ts
+import { CancelTokenSource, InternalAxiosRequestConfig } from "axios";
+
+export const requestInterceptor = (
+  token: string | null,
+  cancelable: boolean,
+  cancelTokenSource: CancelTokenSource,
+) => {
+  return async (config: InternalAxiosRequestConfig) => {
+    if (token) {
+      if (config.headers) {
+        config.headers["Authorization"] = `Bearer ${token}`;
+      }
+    }
+    if (cancelable) {
+      config.cancelToken = cancelTokenSource.token;
+    }
+    return config;
+  };
+};
+
+
+// interceptors\response.ts
+import { AxiosResponse } from "axios";
+import { ApiResponse } from "../types/index.js";
+
+export const responseInterceptor = (
+  successToast: boolean = false,
+  customToastMessage?: string,
+  customToastMessageType: "success" | "error" | "warning" = "success",
+  toastHandler?: (
+    message: string,
+    type: "success" | "error" | "warning",
+  ) => void,
+) => {
+  return (response: AxiosResponse<ApiResponse>) => {
+    if (successToast) {
+      const message = customToastMessage || response.data.message;
+      if (message && toastHandler) {
+        toastHandler(message, customToastMessageType);
+      }
+    }
+    return response;
+  };
+};
+
+
+// types\ApiResponse.ts
+export interface ApiResponse<T = unknown> {
+  message: string;
+  data?: T;
+  statusCode?: number;
+  success?: boolean;
+}
+
+
+// types\ErrorTypes.ts
+export class AxlyError<T = unknown> extends Error {
+  public code: string;
+  public data?: T;
+  public isRetryable?: boolean;
+  public status?: number;
+  constructor(
+    message: string,
+    code: string,
+    data?: T,
+    isRetryable?: boolean,
+    status?: number,
+  ) {
+    super(message);
+    this.name = "AxlyError";
+    this.code = code;
+    this.data = data;
+    this.isRetryable = isRetryable;
+    this.status = status;
+    Object.setPrototypeOf(this, AxlyError.prototype);
+  }
+}
+
+
+// types\index.ts
+export * from "./ApiResponse.js";
+export * from "./ErrorTypes.js";
+export * from "./RequestOptions.js";
+
+
+// types\RequestOptions.ts
+import { AxiosRequestConfig } from "axios";
+
+export interface RequestOptions<T = unknown> {
+  method: AxiosRequestConfig["method"];
+  data?: T;
+  url: string;
+  contentType?: string;
+  customHeaders?: Record<string, string>;
+  responseType?: AxiosRequestConfig["responseType"];
+  params?: Record<string, unknown>;
+  baseURL?: string;
+  toastHandler?: (
+    message: string,
+    type: "success" | "error" | "warning",
+  ) => void;
+  successToast?: boolean;
+  errorToast?: boolean;
+  customToastMessage?: string;
+  customErrorToastMessage?: string;
+  customToastMessageType?: "success" | "error" | "warning";
+  customErrorToastMessageType?: "error" | "warning";
+  onUploadProgress?: (progress: number) => void;
+  onDownloadProgress?: (progress: number) => void;
+  cancelable?: boolean;
+  onCancel?: () => void;
+}
+
+
+// utils\index.ts
+export { default as isEmpty } from "./isEmpty.js";
+export { default as isString } from "./isString.js";
+
+
+// utils\isEmpty.ts
+/**
+ * Checks if a value is empty.
+ *
+ * @param {any} value - The value to check.
+ * @returns {boolean} - Returns true if the value is empty, otherwise false.
+ */
+const isEmpty = (value: unknown): boolean => {
+  if (value == null) return true;
+  if (Array.isArray(value) || typeof value === "string") {
+    return value.length === 0;
+  }
+  if (value instanceof Set || value instanceof Map) {
+    return value.size === 0;
+  }
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+  return false;
+};
+
+export default isEmpty;
+
+
+// utils\isString.ts
+/**
+ * Checks if a value is of type string.
+ *
+ * @param {any} value - The value to check.
+ * @returns {boolean} - Returns true if the value is a string, otherwise false.
+ */
+const isString = (value: unknown): value is string => typeof value === "string";
+
+export default isString;
+
