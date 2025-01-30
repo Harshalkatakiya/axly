@@ -1,11 +1,11 @@
 import axios, { AxiosError, AxiosResponse, CancelTokenSource } from "axios";
-import isEmpty from "utils/isEmpty.js";
 import {
   errorInterceptor,
   requestInterceptor,
   responseInterceptor,
 } from "./interceptors/index.js";
 import { ApiResponse, AxlyError, RequestOptions } from "./types/index.js";
+import { isEmpty } from "./utils/index.js";
 
 class AxlyClient {
   private static instance: AxlyClient | null = null;
