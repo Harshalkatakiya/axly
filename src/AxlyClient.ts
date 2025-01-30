@@ -78,10 +78,10 @@ class AxlyClient {
         "Content-Type": isEmpty(contentType) ? "application/json" : contentType,
         ...customHeaders,
       },
+      responseType: responseType || "json",
+      cancelToken: cancelable ? this.cancelTokenSource.token : undefined,
     });
-    instance.interceptors.request.use(
-      requestInterceptor(this.token, cancelable, this.cancelTokenSource),
-    );
+    instance.interceptors.request.use(requestInterceptor(this.token));
     instance.interceptors.response.use(
       responseInterceptor(
         successToast,
@@ -97,12 +97,11 @@ class AxlyClient {
       ),
     );
     try {
-      const response = await instance({
+      const response = await instance.request({
         method,
         data,
         url,
         params,
-        responseType: responseType || "json",
         onUploadProgress: this.createProgressHandler(onUploadProgress),
         onDownloadProgress: this.createProgressHandler(onDownloadProgress),
       });

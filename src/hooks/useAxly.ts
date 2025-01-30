@@ -45,7 +45,7 @@ const useAxly = (options: RequestOptions, deps: DependencyList = []) => {
   }, []);
   return useMemo(
     () => ({
-      data: data?.data,
+      data,
       isLoading,
       error,
       uploadProgress,
