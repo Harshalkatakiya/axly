@@ -1,18 +1,17 @@
-import { AxiosResponse } from "axios";
-import {
-  DependencyList,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { DependencyList, useCallback, useEffect, useState } from "react";
 import { client } from "../AxlyClient.js";
-import { ApiResponse, AxlyError, RequestOptions } from "../types/index.js";
+import {
+  ApiResponse,
+  AxlyError,
+  RequestOptions,
+  UseAxlyResult,
+} from "../types/index.js";
 
-const useAxly = (options: RequestOptions, deps: DependencyList = []) => {
-  const [data, setData] = useState<AxiosResponse<ApiResponse> | undefined>(
-    undefined,
-  );
+const useAxly = async <T = object>(
+  options: RequestOptions,
+  deps: DependencyList = [],
+): Promise<UseAxlyResult<T>> => {
+  const [data, setData] = useState<ApiResponse<T> | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxlyError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -26,7 +25,7 @@ const useAxly = (options: RequestOptions, deps: DependencyList = []) => {
         onUploadProgress: setUploadProgress,
         onDownloadProgress: setDownloadProgress,
       });
-      setData(response);
+      setData(response.data as ApiResponse<T>);
     } catch (err) {
       setError(
         err instanceof AxlyError
@@ -43,18 +42,15 @@ const useAxly = (options: RequestOptions, deps: DependencyList = []) => {
   const cancelRequest = useCallback(() => {
     client.cancelRequest();
   }, []);
-  return useMemo(
-    () => ({
-      data,
-      isLoading,
-      error,
-      uploadProgress,
-      downloadProgress,
-      refetch: fetchData,
-      cancelRequest,
-    }),
-    [data, isLoading, error, uploadProgress, downloadProgress, fetchData],
-  );
+  return {
+    data,
+    isLoading,
+    error,
+    uploadProgress,
+    downloadProgress,
+    refetch: fetchData,
+    cancelRequest,
+  };
 };
 
 export default useAxly;
