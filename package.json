@@ -1,6 +1,6 @@
 {
   "name": "axly",
-  "version": "1.1.20",
+  "version": "1.1.21",
   "type": "module",
   "description": "A modern, flexible, and powerful HTTP client built on top of Axios with advanced features like dynamic configurations, request cancellation, retry logic, caching, middleware support, and optional Socket.IO integration.",
   "main": "./dist/index.js",
