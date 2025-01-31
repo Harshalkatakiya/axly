@@ -1,3 +1,4 @@
+import { AxiosResponse } from "axios";
 import { DependencyList, useCallback, useEffect, useState } from "react";
 import { client } from "../AxlyClient.js";
 import {
@@ -7,11 +8,13 @@ import {
   UseAxlyResult,
 } from "../types/index.js";
 
-const useAxly = async <T = object>(
+const useAxly = async <T = unknown>(
   options: RequestOptions,
   deps: DependencyList = [],
 ): Promise<UseAxlyResult<T>> => {
-  const [data, setData] = useState<ApiResponse<T> | undefined>(undefined);
+  const [data, setData] = useState<AxiosResponse<ApiResponse<T>> | undefined>(
+    undefined,
+  );
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<AxlyError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -25,7 +28,7 @@ const useAxly = async <T = object>(
         onUploadProgress: setUploadProgress,
         onDownloadProgress: setDownloadProgress,
       });
-      setData(response.data as ApiResponse<T>);
+      setData(response as AxiosResponse<ApiResponse<T>>);
     } catch (err) {
       setError(
         err instanceof AxlyError

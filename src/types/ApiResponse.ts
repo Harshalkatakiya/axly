@@ -1,3 +1,4 @@
+import { AxiosResponse } from "axios";
 import { AxlyError } from "./index.js";
 
 export interface ApiResponse<T = unknown> {
@@ -8,7 +9,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export interface UseAxlyResult<T> {
-  data: ApiResponse<T> | undefined;
+  data: AxiosResponse<ApiResponse<T>> | undefined;
   isLoading: boolean;
   error: AxlyError | null;
   uploadProgress: number | null;
