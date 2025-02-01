@@ -18,18 +18,18 @@ Axly makes API management seamless and efficient for developers.
 2. [📦 Installation](#-installation)
 3. [📖 Usage](#-usage)
    - [🔧 Setting Up Global Configuration](#-setting-up-global-configuration)
-   - [⚛️ Using Axly in React](#-using-axly-in-react)
-   - [🖥️ Using Axly in Node.js](#-using-axly-in-nodejs)
+   - [⚛️ Using Axly in React](#️-using-axly-in-react)
+   - [🖥️ Using Axly in Node.js](#️-using-axly-in-nodejs)
 4. [📚 API Reference](#-api-reference)
    - [`setAxlyConfig` - Global Configuration](#-setaxlyconfig)
-   - [`Axly` - React Hook](#axly-react-hook)
-   - [`AxlyNode` - Node.js API](#axlynode-nodejs)
-   - [`RequestOptions`](#requestoptions)
+   - [`Axly` - React Hook](#-axly-react-hook)
+   - [`AxlyNode` - Node.js API](#-axlynode-nodejs)
+   - [`RequestOptions`](#-requestoptions)
 5. [🚀 Advanced Features](#-advanced-features)
    - [📤 File Upload with Progress](#-file-upload-with-progress-tracking)
    - [🔄 Interceptors](#-interceptors)
    - [🔁 Retry Mechanism](#-retry-mechanism)
-   - [⏹️ Request Cancellation](#-request-cancellation)
+   - [⏹️ Request Cancellation](#️-request-cancellation)
    - [🔔 Toast Notifications](#-toast-notifications)
 6. [🤝 Contributing](#-contributing)
 7. [📄 License](#-license)
@@ -201,6 +201,8 @@ const { useAxly, isLoading, uploadProgress, downloadProgress } = Axly();
 - **`uploadProgress`**: A number representing the upload progress percentage.
 - **`downloadProgress`**: A number representing the download progress percentage.
 
+See [Example: Using Axly in React](#️-using-axly-in-react)
+
 ---
 
 ### 🔧 AxlyNode (Node.js)
@@ -215,6 +217,8 @@ const { useAxly, isLoading, uploadProgress, downloadProgress } = AxlyNode();
 - **`isLoading`**: A boolean indicating whether an API request is currently in progress.
 - **`uploadProgress`**: A number representing the upload progress percentage.
 - **`downloadProgress`**: A number representing the download progress percentage.
+
+See [Example: Using Axly in Node.js](#️-using-axly-in-nodejs)
 
 ---
 
@@ -306,7 +310,7 @@ setAxlyConfig({
 await useAxly({
   method: "GET",
   url: "/data",
-  retry: 3, // Retry up to 3 times
+  retry: 3, // Retry up to the specified number of times
 });
 ```
 
