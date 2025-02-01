@@ -79,13 +79,8 @@ import { setAxlyConfig } from "axly";
 
 setAxlyConfig({
   token: "your-auth-token",
-  apiUrl: "https://api.example.com",
-  requestInterceptors: [
-    (config) => {
-      config.headers["Authorization"] = `Bearer ${config.token}`;
-      return config;
-    },
-  ],
+  baseURL: "https://api.example.com",
+  requestInterceptors: [(config) => config],
   responseInterceptors: [(response) => response],
   errorHandler: async (error) => {
     console.error("Global Error: ", error);
@@ -152,6 +147,7 @@ async function fetchData() {
       url: "/posts",
       params: { page: 1, limit: 10 },
       successToast: true,
+      errorToast: true,
     });
     console.log(response.data);
     console.log("Is Loading: ", isLoading);
