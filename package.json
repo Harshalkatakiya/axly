@@ -70,9 +70,7 @@
     "react",
     "nextjs",
     "nodejs",
-    "socket.io",
     "middleware",
-    "caching",
     "retry-logic"
   ]
 }
