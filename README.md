@@ -1,51 +1,60 @@
 # Axly - A Powerful Axios Wrapper for React and Node.js
 
-Axly is a powerful and flexible HTTP client for React and Node.js, built on top of Axios. It provides advanced features like request/response interceptors, retry mechanisms, progress tracking, cancellation, and toast notifications, making it easier to manage API calls in your applications.
+Axly is a powerful and flexible HTTP client for React and Node.js, built on top of Axios. It simplifies API requests with features like:
+
+🚀 **Request/Response Interceptors**  
+🔄 **Automatic Retry Mechanism**  
+📊 **Progress Tracking**  
+⏳ **Request Cancellation**  
+🔔 **Toast Notifications**
+
+Axly makes API management seamless and efficient for developers.
 
 ---
 
-## Table of Contents
+## 📜 Table of Contents
 
-1. [Features](#features)
-2. [Installation](#installation)
-3. [Usage](#usage)
-   - [Setting Up Global Configuration](#setting-up-global-configuration)
-   - [Using Axly in React](#using-axly-in-react)
-   - [Using Axly in Node.js](#using-axly-in-nodejs)
-4. [API Reference](#api-reference)
-   - [`setAxlyConfig` (Global Configuration)](#setaxlyconfig)
-   - [`Axly` (React Hook)](#axly-react-hook)
-   - [`AxlyNode` (Node.js)](#axlynode-nodejs)
+1. [✨ Features](#-features)
+2. [📦 Installation](#-installation)
+3. [📖 Usage](#-usage)
+   - [🔧 Setting Up Global Configuration](#-setting-up-global-configuration)
+   - [⚛️ Using Axly in React](#-using-axly-in-react)
+   - [🖥️ Using Axly in Node.js](#-using-axly-in-nodejs)
+4. [📚 API Reference](#-api-reference)
+   - [`setAxlyConfig` - Global Configuration](#-setaxlyconfig)
+   - [`Axly` - React Hook](#axly-react-hook)
+   - [`AxlyNode` - Node.js API](#axlynode-nodejs)
    - [`RequestOptions`](#requestoptions)
-5. [Advanced Features](#advanced-features)
-   - [Interceptors](#interceptors)
-   - [Retry Mechanism](#retry-mechanism)
-   - [Progress Tracking](#progress-tracking)
-   - [Cancellation](#cancellation)
-   - [Toast Notifications](#toast-notifications)
+5. [🚀 Advanced Features](#-advanced-features)
+   - [📤 File Upload with Progress](#-file-upload-with-progress-tracking)
+   - [🔄 Interceptors](#-interceptors)
+   - [🔁 Retry Mechanism](#-retry-mechanism)
+   - [⏹️ Request Cancellation](#-request-cancellation)
+   - [🔔 Toast Notifications](#-toast-notifications)
 6. [🤝 Contributing](#-contributing)
-   - [How to Contribute](#how-to-contribute)
 7. [📄 License](#-license)
 8. [👤 Author](#-author)
 
 ---
 
-## Features
+## ✨ Features
 
-- **Global Configuration**: Set up base URLs, headers, and interceptors globally.
-- **React Integration**: Built-in state management for loading, upload/download progress.
-- **Node.js Compatibility**: Works seamlessly in server-side environments.
-- **Retry Mechanism**: Automatically retry failed requests with configurable retry counts.
-- **Progress Tracking**: Track upload and download progress with callbacks.
-- **Cancellation**: Cancel ongoing requests with ease.
-- **Toast Notifications**: Display success/error messages using custom toast handlers.
-- **Customizable**: Override default configurations for individual requests.
+✔ **Global Configuration** – Set base URLs, headers, and interceptors globally.  
+✔ **Request Interceptors** – Modify request configs before sending.  
+✔ **Response Interceptors** – Process responses after they are received.  
+✔ **Error Handling** – Centralized error handling support.  
+✔ **React Integration** – Built-in state management for API loading & progress tracking.  
+✔ **Node.js Support** – Fully compatible with Node.js.  
+✔ **Retry Mechanism** – Automatic request retries on failure.  
+✔ **Progress Tracking** – Track file upload & download progress.  
+✔ **Request Cancellation** – Cancel pending API requests.  
+✔ **Toast Notifications** – Display API success or failure messages.
 
 ---
 
-## Installation
+## 📦 Installation
 
-Install Axly via npm or bun:
+You can install Axly using `npm` or `bun`:
 
 ```bash
 npm install axly
@@ -59,33 +68,27 @@ bun add axly
 
 ---
 
-## Usage
+## 📖 Usage
 
-### Setting Up Global Configuration
+### 🔧 Setting Up Global Configuration
 
-Before using Axly, you need to set up the global configuration using `setAxlyConfig` in main layout or index file.
+Before using Axly, configure it globally using `setAxlyConfig`:
 
 ```javascript
 import { setAxlyConfig } from "axly";
 
 setAxlyConfig({
-  token: "your-auth-token", // Optional: Add bearer authentication token here
-  apiUrl: "https://api.example.com", // Base URL for all requests
+  token: "your-auth-token",
+  apiUrl: "https://api.example.com",
   requestInterceptors: [
     (config) => {
-      // Modify request config (e.g., add headers)
+      config.headers["Authorization"] = `Bearer ${config.token}`;
       return config;
     },
   ],
-  responseInterceptors: [
-    (response) => {
-      // Modify response data
-      return response;
-    },
-  ],
+  responseInterceptors: [(response) => response],
   errorHandler: async (error) => {
-    // Handle errors globally
-    console.error("Global Error Handler: ", error);
+    console.error("Global Error: ", error);
     return Promise.reject(error);
   },
 });
@@ -93,9 +96,9 @@ setAxlyConfig({
 
 ---
 
-### Using Axly in React
+### ⚛️ Using Axly in React
 
-Axly provides a React hook (`useAxly`) that integrates seamlessly with React's state management.
+Axly provides a **React hook** (`useAxly`) for managing API requests easily.
 
 ```javascript
 import { Axly } from "axly";
@@ -103,25 +106,25 @@ import { useEffect } from "react";
 
 const MyComponent = () => {
   const { useAxly, isLoading, uploadProgress } = Axly();
+
   const fetchData = async () => {
     try {
       const response = await useAxly({
         method: "POST",
         url: "/user",
-        data: {
-          name: "John Doe",
-          email: "mail@example.com",
-        },
-        successToast: true, // Display success toast if toastHandler is provided here or in setAxlyConfig
+        data: { name: "John Doe", email: "john@example.com" },
+        successToast: true,
       });
       console.log("User Data: ", response.data);
     } catch (error) {
       console.error("API Error: ", error);
     }
   };
+
   useEffect(() => {
     fetchData();
   }, []);
+
   return (
     <div>
       {isLoading ? <p>Loading...</p> : <p>Data Submitted</p>}
@@ -135,9 +138,7 @@ export default MyComponent;
 
 ---
 
-### Using Axly in Node.js
-
-For server-side usage, Axly provides `AxlyNode`, which works similarly but without React-specific features.
+### 🖥️ Using Axly in Node.js
 
 ```javascript
 import { AxlyNode } from "axly";
@@ -166,9 +167,9 @@ fetchData();
 
 ---
 
-## API Reference
+## 📚 API Reference
 
-### `setAxlyConfig`
+### 🔧 `setAxlyConfig`
 
 Set global configuration for Axly.
 
@@ -176,75 +177,80 @@ Set global configuration for Axly.
 setAxlyConfig(config: AxlyConfig): void;
 ```
 
-#### Parameters
-
-- `token`: Authentication token (optional).
-- `apiUrl`: Base URL for all requests.
-- `requestInterceptors`: Array of request interceptors.
-- `responseInterceptors`: Array of response interceptors.
-- `errorHandler`: Global error handler function.
-- `toastHandler`: Custom toast notification handler.
+| Property               | Type                                                                                                                                | Description                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `token`                | `string` \| `null`                                                                                                                  | Optional auth token.               |
+| `baseURL`              | `string`                                                                                                                            | Base API URL.                      |
+| `requestInterceptors`  | `((config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig)[]`                                                            | Array of request interceptors.     |
+| `responseInterceptors` | `((response: AxiosResponse<ApiResponse<any>>) => AxiosResponse<ApiResponse<any>>)[]`                                                | Array of response interceptors.    |
+| `errorHandler`         | `(error: AxiosError<ApiResponse<any>>) => Promise<AxiosResponse<ApiResponse<any>> \| PromiseLike<AxiosResponse<ApiResponse<any>>>>` | Global error handler.              |
+| `toastHandler`         | `ToastHandler`                                                                                                                      | Custom toast notification handler. |
 
 ---
 
-### `Axly` (React Hook)
+### 🔧 Axly (React Hook)
 
-Provides a React hook for managing API requests with built-in state.
+The `Axly` hook provides a convenient way to make API requests within React components. It returns an object containing the `useAxly` function and state variables for tracking the request status, upload progress, and download progress.
 
 ```javascript
 const { useAxly, isLoading, uploadProgress, downloadProgress } = Axly();
 ```
 
-#### Properties
-
-- `useAxly`: Function to make API requests.
-- `isLoading`: Boolean indicating if a request is in progress.
-- `uploadProgress`: Upload progress percentage.
-- `downloadProgress`: Download progress percentage.
+- **`useAxly`**: A function that accepts `RequestOptions` and returns a promise that resolves to the Axios response.
+- **`isLoading`**: A boolean indicating whether an API request is currently in progress.
+- **`uploadProgress`**: A number representing the upload progress percentage.
+- **`downloadProgress`**: A number representing the download progress percentage.
 
 ---
 
-### `AxlyNode` (Node.js)
+### 🔧 AxlyNode (Node.js)
 
-Provides a Node.js-compatible interface for managing API requests.
+The `AxlyNode` function provides a similar API for making requests in a Node.js environment. It returns an object containing the `useAxly` function and state variables for tracking the request status, upload progress, and download progress.
 
-```javacript
+```javascript
 const { useAxly, isLoading, uploadProgress, downloadProgress } = AxlyNode();
 ```
 
+- **`useAxly`**: A function that accepts `RequestOptions` and returns a promise that resolves to the Axios response.
+- **`isLoading`**: A boolean indicating whether an API request is currently in progress.
+- **`uploadProgress`**: A number representing the upload progress percentage.
+- **`downloadProgress`**: A number representing the download progress percentage.
+
 ---
 
-### `RequestOptions`
+### 🔧 RequestOptions
 
 Configuration options for individual requests.
 
-| Property                  | Type                                                                                           | Description                                          |
-| ------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `method`                  | `"GET"` \| `"POST"` \|`"PATCH"` \|`"PUT"` \|`"DELETE"` \| ...                                  | HTTP method.                                         |
-| `url`                     | `string`                                                                                       | Endpoint URL.                                        |
-| `data`                    | `any`                                                                                          | Request payload API for requests.                    |
-| `contentType`             | `"application/json"` \| `"multipart/form-data"`\| ...                                          | Content-Type header (default: `"application/json"`). |
-| `customHeaders`           | `Record<string, string>`                                                                       | Custom headers for the request.                      |
-| `responseType`            | `"json"` \| `"text"` \| `"arraybuffer"` \| `"blob"` \|`"document"` \|`"stream"` \|`"formdata"` | Expected response type (default: `"json"`).          |
-| `params`                  | `Record<string, any>`                                                                          | Query parameters (e.g. `{ page: 1, limit: 10 }`).    |
-| `baseURL`                 | `string`                                                                                       | Override global base URL.                            |
-| `toastHandler`            | `(message: string, type: string) => void`                                                      | Custom toast notification handler.                   |
-| `successToast`            | `boolean`                                                                                      | Show success toast on successful response.           |
-| `errorToast`              | `boolean`                                                                                      | Show error toast on failure.                         |
-| `customToastMessage`      | `string`                                                                                       | Custom success toast message.                        |
-| `customErrorToastMessage` | `string`                                                                                       | Custom error toast message.                          |
-| `onUploadProgress`        | `(progress: number) => void`                                                                   | Callback for upload progress.                        |
-| `onDownloadProgress`      | `(progress: number) => void`                                                                   | Callback for download progress.                      |
-| `timeout`                 | `number`                                                                                       | Request timeout in milliseconds.                     |
-| `retry`                   | `number`                                                                                       | Number of retry attempts for failed requests.        |
-| `cancelable`              | `boolean`                                                                                      | Enable request cancellation.                         |
-| `onCancel`                | `() => void`                                                                                   | Callback when a request is canceled.                 |
+| Property                    | Type                                                              | Description                                                        |
+| --------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| method                      | AxiosRequestConfig["method"]                                      | Request method. (e.g., "GET", "POST","PATCH","PUT","DELETE", etc.) |
+| url                         | string                                                            | Endpoint URL.                                                      |
+| data                        | any                                                               | Request body data.                                                 |
+| contentType                 | ContentType                                                       | Content-Type header (default: "application/json").                 |
+| customHeaders               | Record<string, string>                                            | Custom headers for the request.                                    |
+| responseType                | AxiosRequestConfig["responseType"]                                | Expected response type (default: "json").                          |
+| params                      | Record<string, any>                                               | Query parameters (e.g. { page: 1, limit: 10 }).                    |
+| baseURL                     | string                                                            | Base URL for the request (overrides global config).                |
+| toastHandler                | ToastHandler                                                      | Custom toast handler function for this request.                    |
+| successToast                | boolean                                                           | Whether to show a success toast.                                   |
+| errorToast                  | boolean                                                           | Whether to show an error toast.                                    |
+| customToastMessage          | string                                                            | Custom success toast message.                                      |
+| customToastMessageType      | "success" \| "error" \| "warning" \| "info" \| "custom" \| string | Type of success toast message.                                     |
+| customErrorToastMessage     | string                                                            | Custom error toast message.                                        |
+| customErrorToastMessageType | "error" \| "warning" \| "custom" \| string                        | Type of error toast message.                                       |
+| onUploadProgress            | (progress: number) => void                                        | Callback for upload progress.                                      |
+| onDownloadProgress          | (progress: number) => void                                        | Callback for download progress.                                    |
+| timeout                     | number                                                            | Request timeout in milliseconds.                                   |
+| retry                       | number                                                            | Number of retries for failed requests.                             |
+| cancelable                  | boolean                                                           | Whether the request can be canceled.                               |
+| onCancel                    | () => void                                                        | Callback when the request is canceled.                             |
 
 ---
 
-## Advanced Features
+## 🚀 Advanced Features
 
-### File Upload with Progress Tracking
+### 📤 File Upload with Progress Tracking
 
 ```javascript
 const { useAxly, uploadProgress } = Axly();
@@ -258,18 +264,14 @@ const handleUpload = async (file) => {
     url: "/upload",
     data: formData,
     contentType: "multipart/form-data",
-    onUploadProgress: (progress) => {
-      console.log(`Upload Progress: ${progress}%`);
-    },
+    onUploadProgress: (progress) => console.log(`Upload: ${progress}%`),
     successToast: true,
     errorToast: true,
   });
 };
 ```
 
-### Interceptors
-
-Add custom logic to modify requests or responses globally or per instance.
+### 🔄 Interceptors
 
 ```javascript
 setAxlyConfig({
@@ -298,9 +300,7 @@ setAxlyConfig({
 
 ---
 
-### Retry Mechanism
-
-Automatically retry failed requests by specifying the `retry` option.
+### 🔁 Retry Mechanism
 
 ```javascript
 await useAxly({
@@ -312,26 +312,7 @@ await useAxly({
 
 ---
 
-### Progress Tracking
-
-Track upload and download progress with callbacks.
-
-```javascript
-await useAxly({
-  method: "POST",
-  url: "/upload",
-  data: formData,
-  onUploadProgress: (progress) => {
-    console.log(`Upload Progress: ${progress}%`);
-  },
-});
-```
-
----
-
-### Cancellation
-
-Cancel ongoing requests using the `cancelable` option.
+### ⏹️ Request Cancellation
 
 ```javascript
 const fetchData = async () => {
@@ -342,10 +323,12 @@ const fetchData = async () => {
       cancelable: true,
       onCancel: () => console.log("Request canceled"),
     });
-    console.log("User Data: ", response.data);
+    console.log(response.data);
   } catch (error) {
     if (error.canceled) {
       console.log("Request was canceled");
+    } else {
+      console.error("API Error: ", error);
     }
   }
 };
@@ -353,38 +336,34 @@ const fetchData = async () => {
 
 ---
 
-### Toast Notifications
-
-Display success or error messages using a custom toast handler set globally in `setAxlyConfig`.
+### 🔔 Toast Notifications
 
 ```javascript
-import { toast } from "react-hot-toast"; // You can replace 'react-hot-toast' with any other toast library
+import { toast } from "react-hot-toast"; // You can use any toast library
 
-const Toast = (message, type = "success") => {
+const Toast = (message, type = "success", options) => {
   switch (type) {
     case "success":
-      toast.success(message);
+      toast.success(message, options);
       break;
     case "error":
-      toast.error(message);
+      toast.error(message, options);
       break;
     case "info":
-      toast.error(message);
+      toast(message, options);
       break;
     case "warning":
-      toast.error(message);
+      toast(message, options);
       break;
     case "custom":
-      toast.error(message);
+      toast.custom(message, options);
       break;
     default:
-      toast(message);
+      toast(message, options);
   }
 };
 setAxlyConfig({
-  toastHandler: (message, type) => {
-    console.log(`${type.toUpperCase()}: ${message}`);
-  },
+  toastHandler: Toast,
 });
 
 await useAxly({
@@ -399,26 +378,26 @@ await useAxly({
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you encounter any bugs or have suggestions for improvements, please open an issue on the [GitHub repository](https://github.com/Harshalkatakiya/axly/issues).
+💡 Found a bug? Have a feature request? We welcome contributions!
 
-### How to Contribute
+**Steps to contribute:**
 
 1. Fork this repository.
-2. Create a new branch for your feature or bug fix.
-3. Commit your changes with a clear message.
-4. Open a pull request and describe your changes in detail.
+2. Create a new feature branch.
+3. Commit your changes.
+4. Open a pull request.
 
 ---
 
 ## 📄 License
 
-This package is licensed under the [MIT License](LICENSE).
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 👤 Author
 
-### Harshal Katakiya
+👨‍💻 **Harshal Katakiya**
 
 - GitHub: [@Harshalkatakiya](https://github.com/Harshalkatakiya)
 - Email: [katakiyaharshl001@gmail.com](mailto:katakiyaharshl001@gmail.com)
