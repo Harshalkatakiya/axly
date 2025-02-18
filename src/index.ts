@@ -1,3 +1,5 @@
+/* global setTimeout, AbortController */
+
 import axios, {
   AxiosError,
   AxiosInstance,
