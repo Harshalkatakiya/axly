@@ -119,7 +119,7 @@ const MyComponent = () => {
   useEffect(() => {
     fetchData();
   }, []);
-
+  s;
   return (
     <div>
       {isLoading ? <p>Loading...</p> : <p>Data Submitted</p>}
@@ -401,6 +401,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 - GitHub: [@Harshalkatakiya](https://github.com/Harshalkatakiya)
 - Email: [katakiyaharshl001@gmail.com](mailto:katakiyaharshl001@gmail.com)
-- NPM: [@harshalkatakiya](https://www.npmjs.com/package/@harshalkatakiya)
+- NPM: [@harshalkatakiya](https://www.npmjs.com/~harshalkatakiya)
 
 ---
