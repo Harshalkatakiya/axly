@@ -186,16 +186,18 @@ setAxlyConfig(config: AxlyConfig): void;
 
 ### 🔧 Axly (React Hook)
 
-The `Axly` hook provides a convenient way to make API requests within React components. It returns an object containing the `useAxly` function and state variables for tracking the request status, upload progress, and download progress.
+The `Axly` hook provides a convenient way to make API requests within React components. It returns an object containing the `useAxly` function and state variables for tracking the request status, upload progress, and download progress, and a `cancelRequest` function to abort an ongoing request.
 
 ```javascript
-const { useAxly, isLoading, uploadProgress, downloadProgress } = Axly();
+const { useAxly, isLoading, uploadProgress, downloadProgress, cancelRequest } =
+  Axly();
 ```
 
 - **`useAxly`**: A function that accepts `RequestOptions` and returns a promise that resolves to the Axios response.
 - **`isLoading`**: A boolean indicating whether an API request is currently in progress.
 - **`uploadProgress`**: A number representing the upload progress percentage.
 - **`downloadProgress`**: A number representing the download progress percentage.
+- **`cancelRequest`**: A function that cancels the ongoing request if one exists. This can be used to abort the request before it completes.
 
 See [Example: Using Axly in React](#️-using-axly-in-react)
 
@@ -203,16 +205,18 @@ See [Example: Using Axly in React](#️-using-axly-in-react)
 
 ### 🔧 AxlyNode (Node.js)
 
-The `AxlyNode` function provides a similar API for making requests in a Node.js environment. It returns an object containing the `useAxly` function and state variables for tracking the request status, upload progress, and download progress.
+The `AxlyNode` function provides a similar API for making requests in a Node.js environment. It returns an object containing the `useAxly` function, state variables for tracking the request status, upload progress, download progress, and a `cancelRequest` function to abort an ongoing request.
 
 ```javascript
-const { useAxly, isLoading, uploadProgress, downloadProgress } = AxlyNode();
+const { useAxly, isLoading, uploadProgress, downloadProgress, cancelRequest } =
+  AxlyNode();
 ```
 
 - **`useAxly`**: A function that accepts `RequestOptions` and returns a promise that resolves to the Axios response.
 - **`isLoading`**: A boolean indicating whether an API request is currently in progress.
 - **`uploadProgress`**: A number representing the upload progress percentage.
 - **`downloadProgress`**: A number representing the download progress percentage.
+- **`cancelRequest`**: A function that cancels the ongoing request if one exists. This can be used to abort the request before it completes.
 
 See [Example: Using Axly in Node.js](#️-using-axly-in-nodejs)
 
@@ -315,23 +319,43 @@ await useAxly({
 ### ⏹️ Request Cancellation
 
 ```javascript
-const fetchData = async () => {
-  try {
-    const response = await useAxly({
-      method: "GET",
-      url: "/data",
-      cancelable: true,
-      onCancel: () => console.log("Request canceled"),
-    });
-    console.log(response.data);
-  } catch (error) {
-    if (error.canceled) {
-      console.log("Request was canceled");
-    } else {
-      console.error("API Error: ", error);
+import { Axly } from "axly";
+import { useEffect } from "react";
+
+const MyComponent = () => {
+  const { useAxly, isLoading, cancelRequest } = Axly();
+
+  const fetchData = async () => {
+    try {
+      const response = await useAxly({
+        method: "GET",
+        url: "/data",
+        cancelable: true, // Enable cancellation for this request
+        onCancel: () => console.log("Request canceled"), // Optional callback
+      });
+      console.log("Data: ", response.data);
+    } catch (error) {
+      if (error.canceled) {
+        console.log("Request was canceled");
+      } else {
+        console.error("Error: ", error);
+      }
     }
-  }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      {isLoading ? <p>Loading...</p> : <p>Data Fetched</p>}
+      <button onClick={() => cancelRequest()}>Cancel Request</button>
+    </div>
+  );
 };
+
+export default MyComponent;
 ```
 
 ---
