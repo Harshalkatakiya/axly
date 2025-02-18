@@ -85,6 +85,7 @@ type StateData = {
   isLoading: boolean;
   uploadProgress: number;
   downloadProgress: number;
+  abortController?: AbortController | null;
 };
 
 let globalConfig: AxlyConfig | null = null;
@@ -155,6 +156,12 @@ const AxlyClient = async <T = object>(
   );
   const effectiveToastHandler = optionsToastHandler || config.toastHandler;
   const abortController = cancelable ? new AbortController() : undefined;
+  if (abortController) {
+    setState((prevState) => ({
+      ...prevState,
+      abortController,
+    }));
+  }
   axiosInstance.interceptors.request.use(
     async (reqConfig: InternalAxiosRequestConfig) => {
       if (reqConfig.headers && config.token) {
@@ -170,7 +177,12 @@ const AxlyClient = async <T = object>(
   );
   axiosInstance.interceptors.response.use(
     (response: AxiosResponse<ApiResponse<T>>) => {
-      setState({ isLoading: false, uploadProgress: 0, downloadProgress: 0 });
+      setState({
+        isLoading: false,
+        uploadProgress: 0,
+        downloadProgress: 0,
+        abortController: null,
+      });
       if (successToast && effectiveToastHandler) {
         const message = customToastMessage || response.data.message;
         if (message) {
@@ -180,7 +192,12 @@ const AxlyClient = async <T = object>(
       return response;
     },
     async (error: AxiosError<ApiResponse<T>>) => {
-      setState({ isLoading: false, uploadProgress: 0, downloadProgress: 0 });
+      setState({
+        isLoading: false,
+        uploadProgress: 0,
+        downloadProgress: 0,
+        abortController: null,
+      });
       if (retryCount < retry) {
         const delayMs = (retryCount + 1) * 500;
         await delay(delayMs);
@@ -249,16 +266,25 @@ const Axly = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
+    abortController: null,
   });
-  const retryCount: number = 0;
+  const cancelRequest = () => {
+    if (state.abortController) {
+      state.abortController.abort();
+      setState((prev) => ({
+        ...prev,
+        abortController: null,
+      }));
+    }
+  };
   const useAxly = async <T = object>(options: RequestOptions) => {
     if (!globalConfig)
       throw new Error(
         "AxlyConfig is not set. Please call setAxlyConfig first.",
       );
-    return AxlyClient<T>(globalConfig, options, setState, retryCount);
+    return AxlyClient<T>(globalConfig, options, setState, 0);
   };
-  return { useAxly, ...state };
+  return { useAxly, cancelRequest, ...state };
 };
 
 const AxlyNode = () => {
@@ -266,8 +292,14 @@ const AxlyNode = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
+    abortController: null,
   };
-  const retryCount: number = 0;
+  const cancelRequest = () => {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+  };
   const useAxly = async <T = object>(options: RequestOptions) => {
     if (!globalConfig)
       throw new Error(
@@ -279,10 +311,10 @@ const AxlyNode = () => {
       (newState) => {
         Object.assign(state, newState);
       },
-      retryCount,
+      0,
     );
   };
-  return { useAxly, ...state };
+  return { useAxly, cancelRequest, ...state };
 };
 
 export { Axly, AxlyNode, setAxlyConfig };
