@@ -62,15 +62,15 @@
     "url": "https://github.com/Harshalkatakiya"
   },
   "keywords": [
-    "http",
-    "axios",
-    "fetch",
-    "http-client",
-    "typescript",
-    "react",
-    "nextjs",
-    "nodejs",
-    "middleware",
-    "retry-logic"
+    "Axly",
+    "Axly Axios Wrapper",
+    "Axios Wrapper for React",
+    "Axios Wrapper for Node.js",
+    "HTTP Client for React",
+    "HTTP Client for Node.js",
+    "Axios React Hook",
+    "API Request Management",
+    "React API Client",
+    "Node.js API Client"
   ]
 }

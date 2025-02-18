@@ -3,7 +3,6 @@ import axios, {
   AxiosInstance,
   AxiosRequestConfig,
   AxiosResponse,
-  CancelTokenSource,
   InternalAxiosRequestConfig,
 } from "axios";
 import { Dispatch, SetStateAction, useState } from "react";
@@ -153,15 +152,15 @@ const AxlyClient = async <T = object>(
     contentType,
   );
   const effectiveToastHandler = optionsToastHandler || config.toastHandler;
-  const cancelTokenSource: CancelTokenSource = axios.CancelToken.source();
+  const abortController = cancelable ? new AbortController() : undefined;
   axiosInstance.interceptors.request.use(
     async (reqConfig: InternalAxiosRequestConfig) => {
       if (reqConfig.headers && config.token) {
         reqConfig.headers["Authorization"] = `Bearer ${config.token}`;
       }
       reqConfig.timeout = timeout;
-      if (cancelable) {
-        reqConfig.cancelToken = cancelTokenSource.token;
+      if (cancelable && abortController) {
+        reqConfig.signal = abortController.signal;
       }
       return reqConfig;
     },
@@ -185,7 +184,10 @@ const AxlyClient = async <T = object>(
         await delay(delayMs);
         return AxlyClient<T>(config, options, setState, retryCount + 1);
       }
-      if (axios.isCancel(error)) {
+      if (
+        (error.name === "CanceledError" || error.code === "ERR_CANCELED") &&
+        cancelable
+      ) {
         if (onCancel) onCancel();
         return Promise.reject({ canceled: true });
       }
