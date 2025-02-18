@@ -8,10 +8,18 @@ import axios, {
 } from "axios";
 import { Dispatch, SetStateAction, useState } from "react";
 
+export type CustomToastMessageType =
+  | "success"
+  | "error"
+  | "warning"
+  | "info"
+  | "custom"
+  | string;
+
 export interface ToastHandler {
   (
     message: string,
-    type: "success" | "error" | "warning" | "info" | "custom" | string,
+    type: CustomToastMessageType,
     options?: Record<string, any>,
   ): void;
 }
@@ -61,13 +69,7 @@ export interface RequestOptions {
   successToast?: boolean;
   errorToast?: boolean;
   customToastMessage?: string;
-  customToastMessageType?:
-    | "success"
-    | "error"
-    | "warning"
-    | "info"
-    | "custom"
-    | string;
+  customToastMessageType?: CustomToastMessageType;
   customErrorToastMessage?: string;
   customErrorToastMessageType?: "error" | "warning" | "custom" | string;
   onUploadProgress?: (progress: number) => void;
@@ -89,6 +91,8 @@ let globalConfig: AxlyConfig | null = null;
 const setAxlyConfig = (config: AxlyConfig) => {
   globalConfig = config;
 };
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const createAxiosInstance = (
   config: AxlyConfig,
@@ -127,7 +131,7 @@ const AxlyClient = async <T = object>(
     responseType,
     params,
     baseURL,
-    toastHandler,
+    toastHandler: optionsToastHandler,
     successToast = false,
     errorToast = false,
     customToastMessage,
@@ -148,10 +152,11 @@ const AxlyClient = async <T = object>(
     customHeaders,
     contentType,
   );
+  const effectiveToastHandler = optionsToastHandler || config.toastHandler;
   const cancelTokenSource: CancelTokenSource = axios.CancelToken.source();
   axiosInstance.interceptors.request.use(
     async (reqConfig: InternalAxiosRequestConfig) => {
-      if (reqConfig.headers) {
+      if (reqConfig.headers && config.token) {
         reqConfig.headers["Authorization"] = `Bearer ${config.token}`;
       }
       reqConfig.timeout = timeout;
@@ -165,10 +170,10 @@ const AxlyClient = async <T = object>(
   axiosInstance.interceptors.response.use(
     (response: AxiosResponse<ApiResponse<T>>) => {
       setState({ isLoading: false, uploadProgress: 0, downloadProgress: 0 });
-      if (successToast && toastHandler) {
+      if (successToast && effectiveToastHandler) {
         const message = customToastMessage || response.data.message;
         if (message) {
-          toastHandler(message, customToastMessageType);
+          effectiveToastHandler(message, customToastMessageType);
         }
       }
       return response;
@@ -176,18 +181,20 @@ const AxlyClient = async <T = object>(
     async (error: AxiosError<ApiResponse<T>>) => {
       setState({ isLoading: false, uploadProgress: 0, downloadProgress: 0 });
       if (retryCount < retry) {
+        const delayMs = (retryCount + 1) * 500;
+        await delay(delayMs);
         return AxlyClient<T>(config, options, setState, retryCount + 1);
       }
       if (axios.isCancel(error)) {
         if (onCancel) onCancel();
         return Promise.reject({ canceled: true });
       }
-      if (errorToast && toastHandler) {
+      if (errorToast && effectiveToastHandler) {
         const errorMessage =
           customErrorToastMessage ||
           (error as AxiosError<ApiResponse<T>>).response?.data?.message ||
           "An error occurred";
-        toastHandler(errorMessage, customErrorToastMessageType);
+        effectiveToastHandler(errorMessage, customErrorToastMessageType);
       }
       if (config.errorHandler) {
         return config.errorHandler(error);
