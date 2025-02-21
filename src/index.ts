@@ -5,23 +5,23 @@ import axios, {
   AxiosInstance,
   AxiosRequestConfig,
   AxiosResponse,
-  InternalAxiosRequestConfig,
-} from "axios";
-import { Dispatch, SetStateAction, useState } from "react";
+  InternalAxiosRequestConfig
+} from 'axios';
+import { Dispatch, SetStateAction, useState } from 'react';
 
 export type CustomToastMessageType =
-  | "success"
-  | "error"
-  | "warning"
-  | "info"
-  | "custom"
+  | 'success'
+  | 'error'
+  | 'warning'
+  | 'info'
+  | 'custom'
   | string;
 
 export interface ToastHandler {
   (
     message: string,
     type: CustomToastMessageType,
-    options?: Record<string, any>,
+    options?: Record<string, any>
   ): void;
 }
 
@@ -29,13 +29,13 @@ export interface AxlyConfig {
   token: string | null;
   baseURL: string;
   requestInterceptors?: ((
-    config: InternalAxiosRequestConfig,
+    config: InternalAxiosRequestConfig
   ) => InternalAxiosRequestConfig)[];
   responseInterceptors?: ((
-    response: AxiosResponse<ApiResponse<any>>,
+    response: AxiosResponse<ApiResponse<any>>
   ) => AxiosResponse<ApiResponse<any>>)[];
   errorHandler?: (
-    error: AxiosError<ApiResponse<any>>,
+    error: AxiosError<ApiResponse<any>>
   ) => Promise<
     | AxiosResponse<ApiResponse<any>>
     | PromiseLike<AxiosResponse<ApiResponse<any>>>
@@ -49,21 +49,21 @@ export interface ApiResponse<T = any> {
 }
 
 export type ContentType =
-  | "text/html"
-  | "text/plain"
-  | "multipart/form-data"
-  | "application/json"
-  | "application/x-www-form-urlencoded"
-  | "application/octet-stream"
+  | 'text/html'
+  | 'text/plain'
+  | 'multipart/form-data'
+  | 'application/json'
+  | 'application/x-www-form-urlencoded'
+  | 'application/octet-stream'
   | string;
 
 export interface RequestOptions {
-  method: AxiosRequestConfig["method"];
+  method: AxiosRequestConfig['method'];
   data?: any;
   url: string;
   contentType?: ContentType;
   customHeaders?: Record<string, string>;
-  responseType?: AxiosRequestConfig["responseType"];
+  responseType?: AxiosRequestConfig['responseType'];
   params?: Record<string, any>;
   baseURL?: string;
   toastHandler?: ToastHandler;
@@ -72,7 +72,7 @@ export interface RequestOptions {
   customToastMessage?: string;
   customToastMessageType?: CustomToastMessageType;
   customErrorToastMessage?: string;
-  customErrorToastMessageType?: "error" | "warning" | "custom" | string;
+  customErrorToastMessageType?: 'error' | 'warning' | 'custom' | string;
   onUploadProgress?: (progress: number) => void;
   onDownloadProgress?: (progress: number) => void;
   timeout?: number;
@@ -100,20 +100,20 @@ const createAxiosInstance = (
   config: AxlyConfig,
   customBaseURL?: string,
   customHeaders?: Record<string, string>,
-  contentType?: ContentType,
+  contentType?: ContentType
 ): AxiosInstance => {
   const instance = axios.create({
     baseURL: customBaseURL || config.baseURL,
     headers: {
-      "Content-Type": contentType || "application/json",
-      ...customHeaders,
-    },
+      'Content-Type': contentType || 'application/json',
+      ...customHeaders
+    }
   });
   config.requestInterceptors?.forEach((interceptor) =>
-    instance.interceptors.request.use(interceptor),
+    instance.interceptors.request.use(interceptor)
   );
   config.responseInterceptors?.forEach((interceptor) =>
-    instance.interceptors.response.use(interceptor),
+    instance.interceptors.response.use(interceptor)
   );
   return instance;
 };
@@ -122,7 +122,7 @@ const AxlyClient = async <T = object>(
   config: AxlyConfig,
   options: RequestOptions,
   setState: Dispatch<SetStateAction<StateData>>,
-  retryCount: number,
+  retryCount: number
 ): Promise<AxiosResponse<ApiResponse<T>>> => {
   const {
     method,
@@ -137,35 +137,35 @@ const AxlyClient = async <T = object>(
     successToast = false,
     errorToast = false,
     customToastMessage,
-    customToastMessageType = "success",
+    customToastMessageType = 'success',
     customErrorToastMessage,
-    customErrorToastMessageType = "error",
+    customErrorToastMessageType = 'error',
     onUploadProgress,
     onDownloadProgress,
     timeout = 100000,
     retry = 0,
     cancelable = false,
-    onCancel,
+    onCancel
   } = options;
   setState({ isLoading: true, uploadProgress: 0, downloadProgress: 0 });
   const axiosInstance = createAxiosInstance(
     config,
     baseURL,
     customHeaders,
-    contentType,
+    contentType
   );
   const effectiveToastHandler = optionsToastHandler || config.toastHandler;
   const abortController = cancelable ? new AbortController() : undefined;
   if (abortController) {
     setState((prevState) => ({
       ...prevState,
-      abortController,
+      abortController
     }));
   }
   axiosInstance.interceptors.request.use(
     async (reqConfig: InternalAxiosRequestConfig) => {
       if (reqConfig.headers && config.token) {
-        reqConfig.headers["Authorization"] = `Bearer ${config.token}`;
+        reqConfig.headers['Authorization'] = `Bearer ${config.token}`;
       }
       reqConfig.timeout = timeout;
       if (cancelable && abortController) {
@@ -173,7 +173,7 @@ const AxlyClient = async <T = object>(
       }
       return reqConfig;
     },
-    (error) => Promise.reject(error),
+    (error) => Promise.reject(error)
   );
   axiosInstance.interceptors.response.use(
     (response: AxiosResponse<ApiResponse<T>>) => {
@@ -181,7 +181,7 @@ const AxlyClient = async <T = object>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null,
+        abortController: null
       });
       if (successToast && effectiveToastHandler) {
         const message = customToastMessage || response.data.message;
@@ -196,7 +196,7 @@ const AxlyClient = async <T = object>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null,
+        abortController: null
       });
       if (retryCount < retry) {
         const delayMs = (retryCount + 1) * 500;
@@ -204,7 +204,7 @@ const AxlyClient = async <T = object>(
         return AxlyClient<T>(config, options, setState, retryCount + 1);
       }
       if (
-        (error.name === "CanceledError" || error.code === "ERR_CANCELED") &&
+        (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') &&
         cancelable
       ) {
         if (onCancel) onCancel();
@@ -214,16 +214,16 @@ const AxlyClient = async <T = object>(
         const errorMessage =
           customErrorToastMessage ||
           (error as AxiosError<ApiResponse<T>>).response?.data?.message ||
-          "An error occurred";
+          'An error occurred';
         effectiveToastHandler(errorMessage, customErrorToastMessageType);
       }
       if (config.errorHandler) {
         return config.errorHandler(error);
       }
       return Promise.reject(
-        (error as AxiosError<ApiResponse<T>>).response?.data || error,
+        (error as AxiosError<ApiResponse<T>>).response?.data || error
       );
-    },
+    }
   );
   try {
     const response = await axiosInstance({
@@ -231,27 +231,27 @@ const AxlyClient = async <T = object>(
       data,
       url,
       params,
-      responseType: responseType || "json",
+      responseType: responseType || 'json',
       onUploadProgress: (progressEvent) => {
         const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          (progressEvent.loaded * 100) / (progressEvent.total || 1)
         );
         setState((prevState) => ({
           ...prevState,
-          uploadProgress: percentCompleted,
+          uploadProgress: percentCompleted
         }));
         if (onUploadProgress) onUploadProgress(percentCompleted);
       },
       onDownloadProgress: (progressEvent) => {
         const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / (progressEvent.total || 1),
+          (progressEvent.loaded * 100) / (progressEvent.total || 1)
         );
         setState((prevState) => ({
           ...prevState,
-          downloadProgress: percentCompleted,
+          downloadProgress: percentCompleted
         }));
         if (onDownloadProgress) onDownloadProgress(percentCompleted);
-      },
+      }
     });
     return response;
   } catch (error) {
@@ -266,21 +266,21 @@ const Axly = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null,
+    abortController: null
   });
   const cancelRequest = () => {
     if (state.abortController) {
       state.abortController.abort();
       setState((prev) => ({
         ...prev,
-        abortController: null,
+        abortController: null
       }));
     }
   };
   const useAxly = async <T = object>(options: RequestOptions) => {
     if (!globalConfig)
       throw new Error(
-        "AxlyConfig is not set. Please call setAxlyConfig first.",
+        'AxlyConfig is not set. Please call setAxlyConfig first.'
       );
     return AxlyClient<T>(globalConfig, options, setState, 0);
   };
@@ -292,7 +292,7 @@ const AxlyNode = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null,
+    abortController: null
   };
   const cancelRequest = () => {
     if (state.abortController) {
@@ -303,7 +303,7 @@ const AxlyNode = () => {
   const useAxly = async <T = object>(options: RequestOptions) => {
     if (!globalConfig)
       throw new Error(
-        "AxlyConfig is not set. Please call setAxlyConfig first.",
+        'AxlyConfig is not set. Please call setAxlyConfig first.'
       );
     return AxlyClient<T>(
       globalConfig,
@@ -311,7 +311,7 @@ const AxlyNode = () => {
       (newState) => {
         Object.assign(state, newState);
       },
-      0,
+      0
     );
   };
   return { useAxly, cancelRequest, ...state };

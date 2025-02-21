@@ -75,17 +75,17 @@ bun add axly
 Before using Axly, configure it globally using `setAxlyConfig`:
 
 ```javascript
-import { setAxlyConfig } from "axly";
+import { setAxlyConfig } from 'axly';
 
 setAxlyConfig({
-  token: "your-auth-token",
-  baseURL: "https://api.example.com",
+  token: 'your-auth-token',
+  baseURL: 'https://api.example.com',
   requestInterceptors: [(config) => config],
   responseInterceptors: [(response) => response],
   errorHandler: async (error) => {
-    console.error("Global Error: ", error);
+    console.error('Global Error: ', error);
     return Promise.reject(error);
-  },
+  }
 });
 ```
 
@@ -96,8 +96,8 @@ setAxlyConfig({
 Axly provides a **React hook** (`useAxly`) for managing API requests easily.
 
 ```javascript
-import { Axly } from "axly";
-import { useEffect } from "react";
+import { Axly } from 'axly';
+import { useEffect } from 'react';
 
 const MyComponent = () => {
   const { useAxly, isLoading, uploadProgress } = Axly();
@@ -105,14 +105,14 @@ const MyComponent = () => {
   const fetchData = async () => {
     try {
       const response = await useAxly({
-        method: "POST",
-        url: "/user",
-        data: { name: "John Doe", email: "john@example.com" },
-        successToast: true,
+        method: 'POST',
+        url: '/user',
+        data: { name: 'John Doe', email: 'john@example.com' },
+        successToast: true
       });
-      console.log("User Data: ", response.data);
+      console.log('User Data: ', response.data);
     } catch (error) {
-      console.error("API Error: ", error);
+      console.error('API Error: ', error);
     }
   };
 
@@ -122,7 +122,9 @@ const MyComponent = () => {
   s;
   return (
     <div>
-      {isLoading ? <p>Loading...</p> : <p>Data Submitted</p>}
+      {isLoading ?
+        <p>Loading...</p>
+      : <p>Data Submitted</p>}
       <p>Upload Progress: {uploadProgress}%</p>
     </div>
   );
@@ -136,25 +138,25 @@ export default MyComponent;
 ### 🖥️ Using Axly in Node.js
 
 ```javascript
-import { AxlyNode } from "axly";
+import { AxlyNode } from 'axly';
 
 const { useAxly, isLoading, uploadProgress, downloadProgress } = AxlyNode();
 
 async function fetchData() {
   try {
     const response = await useAxly({
-      method: "GET",
-      url: "/posts",
+      method: 'GET',
+      url: '/posts',
       params: { page: 1, limit: 10 },
       successToast: true,
-      errorToast: true,
+      errorToast: true
     });
     console.log(response.data);
-    console.log("Is Loading: ", isLoading);
-    console.log("Upload Progress: ", uploadProgress);
-    console.log("Download Progress: ", downloadProgress);
+    console.log('Is Loading: ', isLoading);
+    console.log('Upload Progress: ', uploadProgress);
+    console.log('Download Progress: ', downloadProgress);
   } catch (err) {
-    console.error("Error: ", err);
+    console.error('Error: ', err);
   }
 }
 
@@ -261,16 +263,16 @@ const { useAxly, uploadProgress } = Axly();
 
 const handleUpload = async (file) => {
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append('file', file);
 
   await useAxly({
-    method: "POST",
-    url: "/upload",
+    method: 'POST',
+    url: '/upload',
     data: formData,
-    contentType: "multipart/form-data",
+    contentType: 'multipart/form-data',
     onUploadProgress: (progress) => console.log(`Upload: ${progress}%`),
     successToast: true,
-    errorToast: true,
+    errorToast: true
   });
 };
 ```
@@ -282,23 +284,23 @@ setAxlyConfig({
   requestInterceptors: [
     (config) => {
       // Modify request config (e.g., add headers)
-      config.headers["X-Custom-Header"] = "CustomValue";
+      config.headers['X-Custom-Header'] = 'CustomValue';
       return config;
-    },
+    }
   ],
   responseInterceptors: [
     (response) => {
       // Modify response data
-      console.log("Response intercepted:", response);
+      console.log('Response intercepted:', response);
       return response;
-    },
+    }
   ],
   errorHandler: async (error) => {
     if (error.response?.status === 401) {
-      return Promise.reject("Session expired");
+      return Promise.reject('Session expired');
     }
     return Promise.reject(error);
-  },
+  }
 });
 ```
 
@@ -308,9 +310,9 @@ setAxlyConfig({
 
 ```javascript
 await useAxly({
-  method: "GET",
-  url: "/data",
-  retry: 3, // Retry up to the specified number of times
+  method: 'GET',
+  url: '/data',
+  retry: 3 // Retry up to the specified number of times
 });
 ```
 
@@ -319,8 +321,8 @@ await useAxly({
 ### ⏹️ Request Cancellation
 
 ```javascript
-import { Axly } from "axly";
-import { useEffect } from "react";
+import { Axly } from 'axly';
+import { useEffect } from 'react';
 
 const MyComponent = () => {
   const { useAxly, isLoading, cancelRequest } = Axly();
@@ -328,17 +330,17 @@ const MyComponent = () => {
   const fetchData = async () => {
     try {
       const response = await useAxly({
-        method: "GET",
-        url: "/data",
+        method: 'GET',
+        url: '/data',
         cancelable: true, // Enable cancellation for this request
-        onCancel: () => console.log("Request canceled"), // Optional callback
+        onCancel: () => console.log('Request canceled') // Optional callback
       });
-      console.log("Data: ", response.data);
+      console.log('Data: ', response.data);
     } catch (error) {
       if (error.canceled) {
-        console.log("Request was canceled");
+        console.log('Request was canceled');
       } else {
-        console.error("Error: ", error);
+        console.error('Error: ', error);
       }
     }
   };
@@ -349,7 +351,9 @@ const MyComponent = () => {
 
   return (
     <div>
-      {isLoading ? <p>Loading...</p> : <p>Data Fetched</p>}
+      {isLoading ?
+        <p>Loading...</p>
+      : <p>Data Fetched</p>}
       <button onClick={() => cancelRequest()}>Cancel Request</button>
     </div>
   );
@@ -363,23 +367,23 @@ export default MyComponent;
 ### 🔔 Toast Notifications
 
 ```javascript
-import { toast } from "react-hot-toast"; // You can use any toast library
+import { toast } from 'react-hot-toast'; // You can use any toast library
 
-const Toast = (message, type = "success", options) => {
+const Toast = (message, type = 'success', options) => {
   switch (type) {
-    case "success":
+    case 'success':
       toast.success(message, options);
       break;
-    case "error":
+    case 'error':
       toast.error(message, options);
       break;
-    case "info":
+    case 'info':
       toast(message, options);
       break;
-    case "warning":
+    case 'warning':
       toast(message, options);
       break;
-    case "custom":
+    case 'custom':
       toast.custom(message, options);
       break;
     default:
@@ -387,14 +391,14 @@ const Toast = (message, type = "success", options) => {
   }
 };
 setAxlyConfig({
-  toastHandler: Toast,
+  toastHandler: Toast
 });
 
 await useAxly({
-  method: "GET",
-  url: "/data",
+  method: 'GET',
+  url: '/data',
   successToast: true,
-  errorToast: true,
+  errorToast: true
 });
 ```
 
