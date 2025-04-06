@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["ESNext", "DOM"],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "ESNext",
     "moduleResolution": "node",
     "jsx": "react-jsx",
@@ -15,6 +15,8 @@
     "resolvePackageJsonImports": false,
     "resolveJsonModule": true,
     "declaration": true,
+    "noEmit": true,
+    "isolatedModules": true,
     "sourceMap": false,
     "esModuleInterop": true,
     "types": ["node"],
@@ -23,5 +25,5 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*", "eslint.config.js"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "build"]
 }

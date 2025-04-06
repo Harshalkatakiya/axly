@@ -3,6 +3,7 @@
 import axios, {
   AxiosError,
   AxiosInstance,
+  AxiosProgressEvent,
   AxiosRequestConfig,
   AxiosResponse,
   InternalAxiosRequestConfig
@@ -21,29 +22,29 @@ export interface ToastHandler {
   (
     message: string,
     type: CustomToastMessageType,
-    options?: Record<string, any>
+    options?: Record<string, unknown>
   ): void;
 }
 
 export interface AxlyConfig {
-  token: string | null;
+  token?: string | null;
   baseURL: string;
   requestInterceptors?: ((
     config: InternalAxiosRequestConfig
   ) => InternalAxiosRequestConfig)[];
   responseInterceptors?: ((
-    response: AxiosResponse<ApiResponse<any>>
-  ) => AxiosResponse<ApiResponse<any>>)[];
+    response: AxiosResponse<ApiResponse<unknown>>
+  ) => AxiosResponse<ApiResponse<unknown>>)[];
   errorHandler?: (
-    error: AxiosError<ApiResponse<any>>
+    error: AxiosError<ApiResponse<unknown>>
   ) => Promise<
-    | AxiosResponse<ApiResponse<any>>
-    | PromiseLike<AxiosResponse<ApiResponse<any>>>
+    | AxiosResponse<ApiResponse<unknown>>
+    | PromiseLike<AxiosResponse<ApiResponse<unknown>>>
   >;
   toastHandler?: ToastHandler;
 }
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   message: string;
   data?: T;
 }
@@ -57,14 +58,14 @@ export type ContentType =
   | 'application/octet-stream'
   | string;
 
-export interface RequestOptions {
+export interface RequestOptions<D = unknown> {
   method: AxiosRequestConfig['method'];
-  data?: any;
+  data?: D;
   url: string;
   contentType?: ContentType;
   customHeaders?: Record<string, string>;
   responseType?: AxiosRequestConfig['responseType'];
-  params?: Record<string, any>;
+  params?: Record<string, string | number | boolean>;
   baseURL?: string;
   toastHandler?: ToastHandler;
   successToast?: boolean;
@@ -90,11 +91,12 @@ type StateData = {
 
 let globalConfig: AxlyConfig | null = null;
 
-const setAxlyConfig = (config: AxlyConfig) => {
+const setAxlyConfig = (config: AxlyConfig): void => {
   globalConfig = config;
 };
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 const createAxiosInstance = (
   config: AxlyConfig,
@@ -118,9 +120,9 @@ const createAxiosInstance = (
   return instance;
 };
 
-const AxlyClient = async <T = object>(
+const AxlyClient = async <T = unknown, D = unknown>(
   config: AxlyConfig,
-  options: RequestOptions,
+  options: RequestOptions<D>,
   setState: Dispatch<SetStateAction<StateData>>,
   retryCount: number
 ): Promise<AxiosResponse<ApiResponse<T>>> => {
@@ -201,7 +203,7 @@ const AxlyClient = async <T = object>(
       if (retryCount < retry) {
         const delayMs = (retryCount + 1) * 500;
         await delay(delayMs);
-        return AxlyClient<T>(config, options, setState, retryCount + 1);
+        return AxlyClient<T, D>(config, options, setState, retryCount + 1);
       }
       if (
         (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') &&
@@ -218,7 +220,9 @@ const AxlyClient = async <T = object>(
         effectiveToastHandler(errorMessage, customErrorToastMessageType);
       }
       if (config.errorHandler) {
-        return config.errorHandler(error);
+        return config.errorHandler(
+          error as AxiosError<ApiResponse<unknown>>
+        ) as Promise<AxiosResponse<ApiResponse<T>>>;
       }
       return Promise.reject(
         (error as AxiosError<ApiResponse<T>>).response?.data || error
@@ -232,7 +236,7 @@ const AxlyClient = async <T = object>(
       url,
       params,
       responseType: responseType || 'json',
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
         const percentCompleted = Math.round(
           (progressEvent.loaded * 100) / (progressEvent.total || 1)
         );
@@ -242,7 +246,7 @@ const AxlyClient = async <T = object>(
         }));
         if (onUploadProgress) onUploadProgress(percentCompleted);
       },
-      onDownloadProgress: (progressEvent) => {
+      onDownloadProgress: (progressEvent: AxiosProgressEvent) => {
         const percentCompleted = Math.round(
           (progressEvent.loaded * 100) / (progressEvent.total || 1)
         );
@@ -253,9 +257,8 @@ const AxlyClient = async <T = object>(
         if (onDownloadProgress) onDownloadProgress(percentCompleted);
       }
     });
-    return response;
+    return response as AxiosResponse<ApiResponse<T>>;
   } catch (error) {
-    setState({ isLoading: false, uploadProgress: 0, downloadProgress: 0 });
     const axiosError = error as AxiosError<ApiResponse<T>>;
     return Promise.reject(axiosError.response?.data || axiosError);
   }
@@ -277,12 +280,14 @@ const Axly = () => {
       }));
     }
   };
-  const useAxly = async <T = object>(options: RequestOptions) => {
+  const useAxly = async <T = unknown, D = unknown>(
+    options: RequestOptions<D>
+  ) => {
     if (!globalConfig)
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first.'
       );
-    return AxlyClient<T>(globalConfig, options, setState, 0);
+    return AxlyClient<T, D>(globalConfig, options, setState, 0);
   };
   return { useAxly, cancelRequest, ...state };
 };
@@ -294,23 +299,23 @@ const AxlyNode = () => {
     downloadProgress: 0,
     abortController: null
   };
-  const cancelRequest = () => {
+  const cancelRequest = (): void => {
     if (state.abortController) {
       state.abortController.abort();
       state.abortController = null;
     }
   };
-  const useAxly = async <T = object>(options: RequestOptions) => {
+  const useAxly = async <T = unknown, D = unknown>(
+    options: RequestOptions<D>
+  ) => {
     if (!globalConfig)
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first.'
       );
-    return AxlyClient<T>(
+    return AxlyClient<T, D>(
       globalConfig,
       options,
-      (newState) => {
-        Object.assign(state, newState);
-      },
+      (newState) => Object.assign(state, newState),
       0
     );
   };
@@ -318,3 +323,4 @@ const AxlyNode = () => {
 };
 
 export { Axly, AxlyNode, setAxlyConfig };
+export default Axly;

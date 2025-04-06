@@ -1,8 +1,9 @@
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import typescriptEslint from '@typescript-eslint/eslint-plugin';
+import typescriptPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import prettierPlugin from 'eslint-plugin-prettier';
+import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,44 +19,45 @@ const compat = new FlatCompat({
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  {
-    files: ['./src/**/*.{js,mjs,cjs,ts}'],
-    ignorePatterns: ['./dist/**', 'node_modules/**'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      parser: tsParser,
-      globals: { ...globals.browser, ...globals.node },
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        extraFileExtensions: ['.js', '.mjs', '.ts', '.tsx'],
-        tsconfigRootDir: __dirname,
-        project: './tsconfig.json'
-      }
-    },
-    plugins: {
-      typescriptEslint,
-      prettierPlugin
-    },
-    rules: {
-      'prettier/prettier': 'error',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_' }
-      ]
-    }
-  },
   ...compat.extends(
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:prettier/recommended',
     'eslint-config-prettier'
   ),
+  reactHooksPlugin.configs['recommended-latest'],
   {
+    files: ['./src/**/*.{js,mjs,cjs,ts}'],
+    ignores: ['dist', 'build', 'node_modules'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      parser: tsParser,
+      globals: { ...globals.browser, ...globals.node },
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true
+        },
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        extraFileExtensions: ['.js', '.jsx', '.mjs', '.ts', '.tsx'],
+        tsconfigRootDir: __dirname,
+        project: './tsconfig.json'
+      }
+    },
+    plugins: {
+      '@typescript-eslint': typescriptPlugin,
+      prettier: prettierPlugin
+    },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off'
+      'prettier/prettier': 'error',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
+      ],
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn'
     }
   }
 ];
