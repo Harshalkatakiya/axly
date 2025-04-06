@@ -7,7 +7,7 @@
     "jsx": "react-jsx",
     "rootDir": "./src",
     "baseUrl": "./src",
-    "outDir": "./dist",
+    "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
     },
@@ -15,7 +15,7 @@
     "resolvePackageJsonImports": false,
     "resolveJsonModule": true,
     "declaration": true,
-    "noEmit": true,
+    "noEmitOnError": false,
     "isolatedModules": true,
     "sourceMap": false,
     "esModuleInterop": true,
