@@ -12,7 +12,7 @@
     "build": "tsc",
     "lint": "eslint . --fix",
     "watch": "tsc --watch",
-    "release": "npm version patch && npm publish --access public --tag latest",
+    "release": "tsc && npm version patch && npm publish --access public --tag latest",
     "prettier:check": "prettier -c .",
     "prettier": "prettier -w -u .",
     "prepare": "husky"
