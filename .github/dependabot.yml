@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/' # Change this if your package.json is in a subdirectory
+    schedule:
+      interval: 'daily' # Options: "daily", "weekly", "monthly"
+    target-branch: 'main'
+    allow:
+      - dependency-type: 'all' # Includes both dependencies and devDependencies
+    ignore:
+      - dependency-name: 'bun' # Optional: Ignore bun itself
+    commit-message:
+      prefix: 'chore(deps)'
+    labels:
+      - 'dependencies'
