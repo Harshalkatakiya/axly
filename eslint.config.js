@@ -28,7 +28,7 @@ export default [
   reactHooksPlugin.configs['recommended-latest'],
   {
     files: ['./src/**/*.{js,mjs,cjs,ts}'],
-    ignores: ['dist', 'build', 'node_modules'],
+    ignores: ['./dist', 'build', 'node_modules'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -58,6 +58,11 @@ export default [
       ],
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn'
+    }
+  },
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off'
     }
   }
 ];
