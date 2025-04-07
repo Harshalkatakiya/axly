@@ -25,7 +25,6 @@ export default [
     'plugin:prettier/recommended',
     'eslint-config-prettier'
   ),
-  reactHooksPlugin.configs['recommended-latest'],
   {
     files: ['./src/**/*.{js,mjs,cjs,ts}'],
     ignores: ['./dist', 'build', 'node_modules'],
@@ -47,7 +46,8 @@ export default [
     },
     plugins: {
       '@typescript-eslint': typescriptPlugin,
-      prettier: prettierPlugin
+      prettier: prettierPlugin,
+      'react-hooks': reactHooksPlugin
     },
     rules: {
       'prettier/prettier': 'error',
