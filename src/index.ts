@@ -1,5 +1,4 @@
 /* global setTimeout, AbortController */
-
 import axios, {
   AxiosError,
   AxiosInstance,
@@ -33,20 +32,12 @@ export interface AxlyConfig {
     config: InternalAxiosRequestConfig
   ) => InternalAxiosRequestConfig)[];
   responseInterceptors?: ((
-    response: AxiosResponse<ApiResponse<unknown>>
-  ) => AxiosResponse<ApiResponse<unknown>>)[];
+    response: AxiosResponse<unknown>
+  ) => AxiosResponse<unknown>)[];
   errorHandler?: (
-    error: AxiosError<ApiResponse<unknown>>
-  ) => Promise<
-    | AxiosResponse<ApiResponse<unknown>>
-    | PromiseLike<AxiosResponse<ApiResponse<unknown>>>
-  >;
+    error: AxiosError<unknown>
+  ) => Promise<AxiosResponse<unknown> | PromiseLike<AxiosResponse<unknown>>>;
   toastHandler?: ToastHandler;
-}
-
-export interface ApiResponse<T = unknown> {
-  message: string;
-  data?: T;
 }
 
 export type ContentType =
@@ -120,12 +111,18 @@ const createAxiosInstance = (
   return instance;
 };
 
+const hasMessageInResponse = (
+  data: unknown
+): data is Record<string, unknown> & { message?: string } => {
+  return typeof data === 'object' && data !== null && 'message' in data;
+};
+
 const AxlyClient = async <T = unknown, D = unknown>(
   config: AxlyConfig,
   options: RequestOptions<D>,
   setState: Dispatch<SetStateAction<StateData>>,
   retryCount: number
-): Promise<AxiosResponse<ApiResponse<T>>> => {
+): Promise<AxiosResponse<T>> => {
   const {
     method,
     data,
@@ -178,7 +175,7 @@ const AxlyClient = async <T = unknown, D = unknown>(
     (error) => Promise.reject(error)
   );
   axiosInstance.interceptors.response.use(
-    (response: AxiosResponse<ApiResponse<T>>) => {
+    (response: AxiosResponse<T>) => {
       setState({
         isLoading: false,
         uploadProgress: 0,
@@ -186,14 +183,18 @@ const AxlyClient = async <T = unknown, D = unknown>(
         abortController: null
       });
       if (successToast && effectiveToastHandler) {
-        const message = customToastMessage || response.data.message;
+        const message =
+          customToastMessage ||
+          (hasMessageInResponse(response.data) ?
+            response.data.message
+          : undefined);
         if (message) {
           effectiveToastHandler(message, customToastMessageType);
         }
       }
       return response;
     },
-    async (error: AxiosError<ApiResponse<T>>) => {
+    async (error: AxiosError<T>) => {
       setState({
         isLoading: false,
         uploadProgress: 0,
@@ -215,18 +216,16 @@ const AxlyClient = async <T = unknown, D = unknown>(
       if (errorToast && effectiveToastHandler) {
         const errorMessage =
           customErrorToastMessage ||
-          (error as AxiosError<ApiResponse<T>>).response?.data?.message ||
+          (hasMessageInResponse(error.response?.data) ?
+            error.response?.data?.message
+          : undefined) ||
           'An error occurred';
         effectiveToastHandler(errorMessage, customErrorToastMessageType);
       }
       if (config.errorHandler) {
-        return config.errorHandler(
-          error as AxiosError<ApiResponse<unknown>>
-        ) as Promise<AxiosResponse<ApiResponse<T>>>;
+        return config.errorHandler(error) as Promise<AxiosResponse<T>>;
       }
-      return Promise.reject(
-        (error as AxiosError<ApiResponse<T>>).response?.data || error
-      );
+      return Promise.reject(error.response?.data || error);
     }
   );
   try {
@@ -257,14 +256,14 @@ const AxlyClient = async <T = unknown, D = unknown>(
         if (onDownloadProgress) onDownloadProgress(percentCompleted);
       }
     });
-    return response as AxiosResponse<ApiResponse<T>>;
+    return response as AxiosResponse<T>;
   } catch (error) {
-    const axiosError = error as AxiosError<ApiResponse<T>>;
+    const axiosError = error as AxiosError<T>;
     return Promise.reject(axiosError.response?.data || axiosError);
   }
 };
 
-const Axly = () => {
+const useAxly = () => {
   const [state, setState] = useState<StateData>({
     isLoading: false,
     uploadProgress: 0,
@@ -280,21 +279,21 @@ const Axly = () => {
       }));
     }
   };
-  const useAxly = async <T = unknown, D = unknown>(
+  const request = async <T = unknown, D = unknown>(
     options: RequestOptions<D>,
     configOverride?: AxlyConfig
-  ) => {
+  ): Promise<AxiosResponse<T>> => {
     const effectiveConfig = configOverride || globalConfig;
     if (!effectiveConfig)
       throw new Error(
-        'AxlyConfig is not set. Please call setAxlyConfig first or pass a configuration override in useAxly.'
+        'AxlyConfig is not set. Please call setAxlyConfig first or pass a configuration override to request.'
       );
     return AxlyClient<T, D>(effectiveConfig, options, setState, 0);
   };
-  return { useAxly, cancelRequest, ...state };
+  return { request, cancelRequest, ...state };
 };
 
-const AxlyNode = () => {
+const axlyNode = () => {
   const state: StateData = {
     isLoading: false,
     uploadProgress: 0,
@@ -307,14 +306,14 @@ const AxlyNode = () => {
       state.abortController = null;
     }
   };
-  const useAxly = async <T = unknown, D = unknown>(
+  const request = async <T = unknown, D = unknown>(
     options: RequestOptions<D>,
     configOverride?: AxlyConfig
-  ) => {
+  ): Promise<AxiosResponse<T>> => {
     const effectiveConfig = configOverride || globalConfig;
     if (!effectiveConfig)
       throw new Error(
-        'AxlyConfig is not set. Please call setAxlyConfig first or pass a configuration override in useAxly.'
+        'AxlyConfig is not set. Please call setAxlyConfig first or pass a configuration override to request.'
       );
     return AxlyClient<T, D>(
       effectiveConfig,
@@ -323,8 +322,8 @@ const AxlyNode = () => {
       0
     );
   };
-  return { useAxly, cancelRequest, ...state };
+  return { request, cancelRequest, ...state };
 };
 
-export { Axly, AxlyNode, setAxlyConfig };
-export default Axly;
+export { axlyNode, setAxlyConfig };
+export default useAxly;
