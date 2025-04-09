@@ -286,7 +286,7 @@ const useAxly = () => {
     const effectiveConfig = setAxlyConfig || globalConfig;
     if (!effectiveConfig)
       throw new Error(
-        'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig to request.'
+        'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
     return AxlyClient<T, D>(effectiveConfig, options, setState, 0);
   };
@@ -313,7 +313,7 @@ const axlyNode = () => {
     const effectiveConfig = setAxlyConfig || globalConfig;
     if (!effectiveConfig)
       throw new Error(
-        'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig to request.'
+        'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
     return AxlyClient<T, D>(
       effectiveConfig,
