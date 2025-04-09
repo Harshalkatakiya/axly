@@ -6,7 +6,7 @@ Axly is a powerful and flexible HTTP client for React and Node.js, built on top 
 🔄 **Automatic Retry Mechanism**  
 📊 **Progress Tracking**  
 ⏳ **Request Cancellation**  
-🔔 **Toast Notifications**
+🔔 **Customizable Toast Notifications**
 
 Axly makes API management seamless and efficient for developers.
 
@@ -39,16 +39,18 @@ Axly makes API management seamless and efficient for developers.
 
 ## ✨ Features
 
-✔ **Global Configuration** – Set base URLs, headers, and interceptors globally.  
+✔ **Easy HTTP Requests** – Leverage a simple API to perform HTTP requests with customizable options.  
+✔ **Global Configuration** – Set base URLs, bearer token, Toast notifications, headers, and interceptors globally.  
+✔ **Authorization Support** – Automatically append Bearer tokens for secured API endpoints.
 ✔ **Request Interceptors** – Modify request configs before sending.  
 ✔ **Response Interceptors** – Process responses after they are received.  
 ✔ **Error Handling** – Centralized error handling support.  
-✔ **React Integration** – Built-in state management for API loading & progress tracking.  
-✔ **Node.js Support** – Fully compatible with Node.js.  
-✔ **Retry Mechanism** – Automatic request retries on failure.  
-✔ **Progress Tracking** – Track file upload & download progress.  
+✔ **React Integration** – Use the `useAxly` hook for API loading & progress tracking and cancellation.  
+✔ **Node.js Support** – Utilize `axlyNode` for server-side applications with similar functionality.  
+✔ **Retry Mechanism** – Automatically retry failed requests with incremental backoff delays.  
+✔ **Progress Tracking** – Monitor both upload and download progress, with callback support.  
 ✔ **Request Cancellation** – Cancel pending API requests.  
-✔ **Toast Notifications** – Display API success or failure messages.
+✔ **Customizable Toast Notifications** – Display custom API success or failure messages.
 
 ---
 
@@ -78,12 +80,23 @@ Before using Axly, configure it globally using `setAxlyConfig`:
 import { setAxlyConfig } from 'axly';
 
 setAxlyConfig({
-  token: 'your-auth-token',
+  token: 'your_token_here',
   baseURL: 'https://api.example.com',
-  requestInterceptors: [(config) => config],
-  responseInterceptors: [(response) => response],
+  requestInterceptors: [
+    (config) => {
+      // Modify request config if needed
+      return config;
+    }
+  ],
+  responseInterceptors: [
+    (response) => {
+      // Modify response if needed
+      return response;
+    }
+  ],
   errorHandler: async (error) => {
-    console.error('Global Error: ', error);
+    // Custom error handling logic
+    console.error('Global error handler:', error);
     return Promise.reject(error);
   }
 });
@@ -91,24 +104,25 @@ setAxlyConfig({
 
 ---
 
-### ⚛️ Using Axly in React
+### ⚛️ Using useAxly in React
 
 Axly provides a **React hook** (`useAxly`) for managing API requests easily.
 
 ```javascript
 import { Axly } from 'axly';
-import { useEffect } from 'react';
+import { useEffect, FC } from 'react';
 
-const MyComponent = () => {
-  const { useAxly, isLoading, uploadProgress } = Axly();
+const MyComponent:FC = () => {
+  const { request, isLoading, uploadProgress } = Axly();
 
-  const fetchData = async () => {
+  const saveData = async () => {
     try {
-      const response = await useAxly({
+      const response = await request({
         method: 'POST',
         url: '/user',
         data: { name: 'John Doe', email: 'john@example.com' },
-        successToast: true
+        successToast: true,
+         errorToast: true
       });
       console.log('User Data: ', response.data);
     } catch (error) {
@@ -117,9 +131,9 @@ const MyComponent = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    saveData();
   }, []);
-  s;
+
   return (
     <div>
       {isLoading ?
