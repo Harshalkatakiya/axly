@@ -1,14 +1,16 @@
 # Axly - A Powerful Axios Wrapper for React and Node.js
 
-Axly is a powerful and flexible HTTP client for React and Node.js, built on top of Axios. It simplifies API requests with features like:
+Axly is an HTTP client library built on top of Axios that simplifies making HTTP requests with support for features such as:
 
-🚀 **Request/Response Interceptors**  
-🔄 **Automatic Retry Mechanism**  
-📊 **Progress Tracking**  
-⏳ **Request Cancellation**  
-🔔 **Customizable Toast Notifications**
+- **Request and Response Interceptors** for custom processing
+- **Token-based Authentication** via request headers
+- **Retry Mechanisms** with configurable delays
+- **Progress Tracking** for uploads and downloads
+- **Cancellation** of pending requests
+- **Custom Toast Notifications** on success or error events
+- **Customizable Global and Per-Request Configuration**
 
-Axly makes API management seamless and efficient for developers.
+Axly provides both a React hook for client-side development as well as a Node-friendly function for server-side applications.
 
 ---
 
@@ -56,19 +58,27 @@ Axly makes API management seamless and efficient for developers.
 
 ## 📦 Installation
 
-You can install Axly using `npm` or `bun`:
+Install Axly via `npm`:
 
 ```bash
 npm install axly
 ```
 
-or
+or with `bun`:
 
 ```bash
 bun add axly
 ```
 
 ---
+
+## Configuration
+
+Before making any requests, you need to provide a configuration that sets the global options for Axly. Use the `setAxlyConfig` function to supply your configuration.
+
+### Global Configuration
+
+The configuration object accepts the following properties:
 
 ## 📖 Usage
 

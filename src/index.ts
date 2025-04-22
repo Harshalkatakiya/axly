@@ -281,9 +281,9 @@ const useAxly = () => {
   };
   const request = async <T = unknown, D = unknown>(
     options: RequestOptions<D>,
-    setAxlyConfig?: AxlyConfig
+    overrideConfig?: AxlyConfig
   ): Promise<AxiosResponse<T>> => {
-    const effectiveConfig = setAxlyConfig || globalConfig;
+    const effectiveConfig = overrideConfig || globalConfig;
     if (!effectiveConfig)
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
@@ -308,9 +308,9 @@ const axlyNode = () => {
   };
   const request = async <T = unknown, D = unknown>(
     options: RequestOptions<D>,
-    setAxlyConfig?: AxlyConfig
+    overrideConfig?: AxlyConfig
   ): Promise<AxiosResponse<T>> => {
-    const effectiveConfig = setAxlyConfig || globalConfig;
+    const effectiveConfig = overrideConfig || globalConfig;
     if (!effectiveConfig)
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
