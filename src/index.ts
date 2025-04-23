@@ -78,6 +78,8 @@ type StateData = {
   uploadProgress: number;
   downloadProgress: number;
   abortController?: AbortController | null;
+  data: unknown | null;
+  error: Error | AxiosError | null;
 };
 
 let globalConfig: AxlyConfig | null = null;
@@ -146,7 +148,13 @@ const AxlyClient = async <T = unknown, D = unknown>(
     cancelable = false,
     onCancel
   } = options;
-  setState({ isLoading: true, uploadProgress: 0, downloadProgress: 0 });
+  setState({
+    isLoading: true,
+    uploadProgress: 0,
+    downloadProgress: 0,
+    data: null,
+    error: null
+  });
   const axiosInstance = createAxiosInstance(
     config,
     baseURL,
@@ -180,7 +188,9 @@ const AxlyClient = async <T = unknown, D = unknown>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null
+        abortController: null,
+        data: response.data,
+        error: null
       });
       if (successToast && effectiveToastHandler) {
         const message =
@@ -199,7 +209,9 @@ const AxlyClient = async <T = unknown, D = unknown>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null
+        abortController: null,
+        data: null,
+        error: error
       });
       if (retryCount < retry) {
         const delayMs = (retryCount + 1) * 500;
@@ -268,7 +280,9 @@ const useAxly = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null
+    abortController: null,
+    data: null,
+    error: null
   });
   const cancelRequest = () => {
     if (state.abortController) {
@@ -288,9 +302,31 @@ const useAxly = () => {
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
-    return AxlyClient<T, D>(effectiveConfig, options, setState, 0);
+    setState((prev) => ({ ...prev, isLoading: true, error: null, data: null }));
+    try {
+      const response = await AxlyClient<T, D>(
+        effectiveConfig,
+        options,
+        setState,
+        0
+      );
+      setState((prev) => ({ ...prev, data: response.data, error: null }));
+      return response;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      setState((prev) => ({ ...prev, error: axiosError, data: null }));
+      throw error;
+    }
   };
-  return { request, cancelRequest, ...state };
+  return {
+    request,
+    cancelRequest,
+    data: state.data,
+    error: state.error,
+    isLoading: state.isLoading,
+    uploadProgress: state.uploadProgress,
+    downloadProgress: state.downloadProgress
+  };
 };
 
 const axlyNode = () => {
@@ -298,7 +334,9 @@ const axlyNode = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null
+    abortController: null,
+    data: null,
+    error: null
   };
   const cancelRequest = (): void => {
     if (state.abortController) {
@@ -315,14 +353,31 @@ const axlyNode = () => {
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
-    return AxlyClient<T, D>(
-      effectiveConfig,
-      options,
-      (newState) => Object.assign(state, newState),
-      0
-    );
+    Object.assign(state, { isLoading: true, error: null, data: null });
+    try {
+      const response = await AxlyClient<T, D>(
+        effectiveConfig,
+        options,
+        (newState) => Object.assign(state, newState),
+        0
+      );
+      Object.assign(state, { data: response.data, error: null });
+      return response;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      Object.assign(state, { error: axiosError, data: null });
+      throw error;
+    }
   };
-  return { request, cancelRequest, ...state };
+  return {
+    request,
+    cancelRequest,
+    data: state.data,
+    error: state.error,
+    isLoading: state.isLoading,
+    uploadProgress: state.uploadProgress,
+    downloadProgress: state.downloadProgress
+  };
 };
 
 export { axlyNode, setAxlyConfig };
