@@ -21,7 +21,11 @@ export interface ToastHandler {
   (
     message: string,
     type: CustomToastMessageType,
-    options?: Record<string, unknown>
+    options?:
+      | Record<string, string | number | unknown>
+      | string
+      | number
+      | unknown
   ): void;
 }
 
