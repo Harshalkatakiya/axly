@@ -1,6 +1,6 @@
 {
   "name": "axly",
-  "version": "1.1.45",
+  "version": "1.1.46",
   "type": "module",
   "description": "Axly is a powerful and flexible HTTP client for React and Node.js, built on top of Axios. It simplifies API requests with many features.",
   "main": "./dist/index.js",
