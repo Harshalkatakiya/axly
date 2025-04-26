@@ -78,8 +78,6 @@ type StateData = {
   uploadProgress: number;
   downloadProgress: number;
   abortController?: AbortController | null;
-  data: unknown | null;
-  error: Error | AxiosError | null;
 };
 
 let globalConfig: AxlyConfig | null = null;
@@ -148,13 +146,7 @@ const AxlyClient = async <T = unknown, D = unknown>(
     cancelable = false,
     onCancel
   } = options;
-  setState({
-    isLoading: true,
-    uploadProgress: 0,
-    downloadProgress: 0,
-    data: null,
-    error: null
-  });
+  setState({ isLoading: true, uploadProgress: 0, downloadProgress: 0 });
   const axiosInstance = createAxiosInstance(
     config,
     baseURL,
@@ -188,9 +180,7 @@ const AxlyClient = async <T = unknown, D = unknown>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null,
-        data: response.data,
-        error: null
+        abortController: null
       });
       if (successToast && effectiveToastHandler) {
         const message =
@@ -209,9 +199,7 @@ const AxlyClient = async <T = unknown, D = unknown>(
         isLoading: false,
         uploadProgress: 0,
         downloadProgress: 0,
-        abortController: null,
-        data: null,
-        error: error
+        abortController: null
       });
       if (retryCount < retry) {
         const delayMs = (retryCount + 1) * 500;
@@ -280,9 +268,7 @@ const useAxly = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null,
-    data: null,
-    error: null
+    abortController: null
   });
   const cancelRequest = () => {
     if (state.abortController) {
@@ -302,31 +288,9 @@ const useAxly = () => {
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
-    setState((prev) => ({ ...prev, isLoading: true, error: null, data: null }));
-    try {
-      const response = await AxlyClient<T, D>(
-        effectiveConfig,
-        options,
-        setState,
-        0
-      );
-      setState((prev) => ({ ...prev, data: response.data, error: null }));
-      return response;
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      setState((prev) => ({ ...prev, error: axiosError, data: null }));
-      throw error;
-    }
+    return AxlyClient<T, D>(effectiveConfig, options, setState, 0);
   };
-  return {
-    request,
-    cancelRequest,
-    data: state.data,
-    error: state.error,
-    isLoading: state.isLoading,
-    uploadProgress: state.uploadProgress,
-    downloadProgress: state.downloadProgress
-  };
+  return { request, cancelRequest, ...state };
 };
 
 const axlyNode = () => {
@@ -334,9 +298,7 @@ const axlyNode = () => {
     isLoading: false,
     uploadProgress: 0,
     downloadProgress: 0,
-    abortController: null,
-    data: null,
-    error: null
+    abortController: null
   };
   const cancelRequest = (): void => {
     if (state.abortController) {
@@ -353,31 +315,14 @@ const axlyNode = () => {
       throw new Error(
         'AxlyConfig is not set. Please call setAxlyConfig first or pass a setAxlyConfig parameter to the request function.'
       );
-    Object.assign(state, { isLoading: true, error: null, data: null });
-    try {
-      const response = await AxlyClient<T, D>(
-        effectiveConfig,
-        options,
-        (newState) => Object.assign(state, newState),
-        0
-      );
-      Object.assign(state, { data: response.data, error: null });
-      return response;
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      Object.assign(state, { error: axiosError, data: null });
-      throw error;
-    }
+    return AxlyClient<T, D>(
+      effectiveConfig,
+      options,
+      (newState) => Object.assign(state, newState),
+      0
+    );
   };
-  return {
-    request,
-    cancelRequest,
-    data: state.data,
-    error: state.error,
-    isLoading: state.isLoading,
-    uploadProgress: state.uploadProgress,
-    downloadProgress: state.downloadProgress
-  };
+  return { request, cancelRequest, ...state };
 };
 
 export { axlyNode, setAxlyConfig };
