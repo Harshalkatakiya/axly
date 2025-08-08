@@ -24,7 +24,7 @@
   "devDependencies": {
     "@eslint/js": "^9.25.1",
     "@harshalkatakiya/prettier-config": "^1.0.28",
-    "@types/node": "^22.15.2",
+    "@types/node": "^24.2.1",
     "@types/react": "^19.1.2",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.2",
