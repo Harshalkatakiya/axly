@@ -26,6 +26,6 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "eslint.config.js"],
-  "exclude": ["node_modules", "dist", "build"]
+  "include": ["src/**/*", "eslint.config.js", "prettier.config.js"],
+  "exclude": ["node_modules", "./dist", "./build"]
 }

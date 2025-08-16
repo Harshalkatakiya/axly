@@ -26,20 +26,21 @@ export default [
     'eslint-config-prettier'
   ),
   {
-    files: ['./src/**/*.{js,mjs,cjs,ts}'],
-    ignores: ['dist', 'build', 'node_modules'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
       parser: tsParser,
-      globals: { ...globals.browser, ...globals.node },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        AbortController: 'readonly'
+      },
       parserOptions: {
         ecmaFeatures: {
           jsx: true
         },
         ecmaVersion: 'latest',
         sourceType: 'module',
-        extraFileExtensions: ['.js', '.jsx', '.mjs', '.ts', '.tsx'],
         tsconfigRootDir: __dirname,
         project: './tsconfig.json'
       }
@@ -64,5 +65,11 @@ export default [
     rules: {
       '@typescript-eslint/no-explicit-any': 'off'
     }
+  },
+  {
+    files: ['./src/**/*.{js,mjs,cjs,ts,tsx}']
+  },
+  {
+    ignores: ['./dist', './build', './node_modules']
   }
 ];

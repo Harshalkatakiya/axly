@@ -1,3 +1,4 @@
+/* global AbortController */
 import {
   AxlyClient,
   AxlyConfig,
