@@ -27,7 +27,7 @@ export default [
   ),
   {
     files: ['./src/**/*.{js,mjs,cjs,ts}'],
-    ignores: ['./dist', 'build', 'node_modules'],
+    ignores: ['dist', 'build', 'node_modules'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

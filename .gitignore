@@ -30,7 +30,8 @@ _.seed
 lib-cov
 
 # Coverage directory used by tools like istanbul
-
+dist
+build
 coverage
 *.lcov
 

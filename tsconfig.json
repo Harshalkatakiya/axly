@@ -1,4 +1,6 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "tsconfigRootDir": "./",
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -6,7 +8,7 @@
     "moduleResolution": "node",
     "jsx": "react-jsx",
     "rootDir": "./src",
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
