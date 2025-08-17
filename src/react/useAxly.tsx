@@ -1,6 +1,6 @@
 import type { AxiosResponse } from 'axios';
 import { useEffect, useRef, useState } from 'react';
-import type { RequestOptions, StateData } from '@/types';
+import type { RequestOptions, StateData } from '../types';
 
 export const useAxly = (
   client: ReturnType<typeof import('../client').createAxlyClient>

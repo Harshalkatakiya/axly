@@ -8,14 +8,14 @@ import {
   StateData,
   ToastHandler,
   UploadOptions
-} from '@/types';
+} from './types';
 import {
   delay,
   exponentialBackoffWithJitter,
   hasMessageInResponse,
   isBrowser
-} from '@/utils';
-import { AuthError, CancelledError, RequestError } from '@/utils/errors';
+} from './utils';
+import { AuthError, CancelledError, RequestError } from './utils/errors';
 import axios, {
   AxiosError,
   AxiosInstance,

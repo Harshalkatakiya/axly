@@ -10,9 +10,6 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "outDir": "dist",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
     "resolvePackageJsonExports": false,
     "resolvePackageJsonImports": false,
     "resolveJsonModule": true,
