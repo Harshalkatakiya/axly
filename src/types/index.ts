@@ -37,6 +37,8 @@ export interface RefreshTokens {
   refreshToken: string;
 }
 
+export type EventHandler = (...args: unknown[]) => void;
+
 export interface AxlyConfig {
   multiToken?: boolean;
   token?: string | null;
@@ -69,7 +71,7 @@ export type ContentType =
   | 'application/octet-stream'
   | string;
 
-export interface RequestOptions<D = unknown> {
+export interface RequestOptions<D = unknown, C extends string = 'default'> {
   method: AxiosRequestConfig['method'];
   data?: D;
   url: string;
@@ -91,6 +93,7 @@ export interface RequestOptions<D = unknown> {
   retry?: number;
   cancelable?: boolean;
   onCancel?: () => void;
+  configId?: C;
 }
 
 export type StateData = {
@@ -100,7 +103,7 @@ export type StateData = {
   abortController?: AbortController | null;
 };
 
-export interface UploadOptions {
+export interface UploadOptions<C extends string = 'default'> {
   headers?: Record<string, string>;
   timeout?: number;
   onUploadProgress?: (percent: number) => void;
@@ -108,11 +111,12 @@ export interface UploadOptions {
   baseURL?: string;
   cancelable?: boolean;
   onCancel?: () => void;
+  configId?: C;
 }
 
-export interface AxlyClient {
+export interface AxlyClient<C extends string = 'default'> {
   request<T = unknown, D = unknown>(
-    options: RequestOptions<D>,
+    options: RequestOptions<D, C>,
     stateUpdater?: (
       update: Partial<StateData> | ((prev: StateData) => StateData)
     ) => void
@@ -120,13 +124,17 @@ export interface AxlyClient {
   upload<T = unknown>(
     url: string,
     formData: FormData,
-    opts?: UploadOptions
+    opts?: UploadOptions<C>
   ): Promise<AxiosResponse<T>>;
-  setAccessToken(token: string | null): void;
-  setRefreshToken(token: string | null): void;
-  setAuthorizationHeader(token: string | null): void;
-  setDefaultHeader(name: string, value: string | number | boolean): void;
-  clearDefaultHeader(name: string): void;
+  setAccessToken(token: string | null, configId?: C): void;
+  setRefreshToken(token: string | null, configId?: C): void;
+  setAuthorizationHeader(token: string | null, configId?: C): void;
+  setDefaultHeader(
+    name: string,
+    value: string | number | boolean,
+    configId?: C
+  ): void;
+  clearDefaultHeader(name: string, configId?: C): void;
   cancelRequest(controller?: AbortController | null): void;
   destroy(): void;
   on(event: string, handler: (...args: unknown[]) => void): () => void;

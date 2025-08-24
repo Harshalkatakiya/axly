@@ -1,8 +1,17 @@
 /* global AbortController */
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosProgressEvent,
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig
+} from 'axios';
 import {
   AxlyClient,
   AxlyConfig,
   ContentType,
+  EventHandler,
   RefreshTokens,
   RequestOptions,
   StateData,
@@ -16,16 +25,6 @@ import {
   isBrowser
 } from './utils';
 import { AuthError, CancelledError, RequestError } from './utils/errors';
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  AxiosProgressEvent,
-  AxiosRequestConfig,
-  AxiosResponse,
-  InternalAxiosRequestConfig
-} from 'axios';
-
-type EventHandler = (...args: unknown[]) => void;
 
 class Emitter {
   private handlers = new Map<string, EventHandler[]>();
@@ -112,82 +111,130 @@ class TokenManager {
   }
 }
 
-export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
+export const createAxlyClient = <
+  CM extends Record<string, AxlyConfig> = { default: AxlyConfig }
+>(
+  configInput: CM | AxlyConfig
+): AxlyClient<keyof CM & string> => {
+  const configs: CM =
+    (
+      typeof configInput === 'object' &&
+      configInput !== null &&
+      'baseURL' in configInput &&
+      typeof (configInput as any).baseURL === 'string'
+    ) ?
+      ({ default: configInput as AxlyConfig } as unknown as CM)
+    : (configInput as CM);
+  type CMKey = keyof CM & string;
   const emitter = new Emitter();
-  let axiosInstance: AxiosInstance | null = null;
-  const ensureAxios = () => {
-    if (axiosInstance) return;
-    axiosInstance = axios.create({ baseURL: config.baseURL });
+  const axiosInstances: Map<CMKey, AxiosInstance> = new Map();
+  const tokenManagers: Map<CMKey, TokenManager> = new Map();
+  const applyAccessTokenFunctions: Map<CMKey, (token: string | null) => void> =
+    new Map();
+  const setDefaultHeaderFunctions: Map<
+    CMKey,
+    (name: string, value: string | number | boolean | null) => void
+  > = new Map();
+
+  Object.entries(configs).forEach(([cfgId, config]) => {
+    const configId = cfgId as CMKey;
+    const axiosInstance = axios.create({ baseURL: config.baseURL });
     config.requestInterceptors?.forEach((interceptor) =>
-      axiosInstance!.interceptors.request.use(
+      axiosInstance.interceptors.request.use(
         interceptor as (
           c: InternalAxiosRequestConfig
         ) => InternalAxiosRequestConfig
       )
     );
     config.responseInterceptors?.forEach((interceptor) =>
-      axiosInstance!.interceptors.response.use(
+      axiosInstance.interceptors.response.use(
         interceptor as (r: AxiosResponse) => AxiosResponse
       )
     );
-  };
-  const applyAccessTokenToInstance = (token: string | null) => {
-    ensureAxios();
-    const defaults = axiosInstance!.defaults;
-    defaults.headers = defaults.headers ?? {};
-    if (token) defaults.headers['Authorization'] = `Bearer ${token}`;
-    else delete (defaults.headers as Record<string, unknown>)['Authorization'];
-  };
-  const setDefaultHeaderOnInstance = (
-    name: string,
-    value: string | number | boolean | null
-  ) => {
-    ensureAxios();
-    const defaults = axiosInstance!.defaults;
-    defaults.headers = defaults.headers ?? {};
-    if (value == null)
-      delete (defaults.headers as Record<string, unknown>)[name];
-    else (defaults.headers as Record<string, unknown>)[name] = String(value);
-  };
-  const tokenManager = new TokenManager(
-    config,
-    () => {
-      ensureAxios();
-      return axiosInstance!;
-    },
-    (tok) => applyAccessTokenToInstance(tok)
-  );
-  ensureAxios();
-  const initialToken =
-    config.multiToken ?
-      (config.tokenCallbacks?.getAccessToken?.() ?? config.accessToken ?? null)
-    : (config.token ?? null);
-  applyAccessTokenToInstance(initialToken);
-  const getAccessToken = (): string | null => {
-    return (
-      config.tokenCallbacks?.getAccessToken?.() ?? config.accessToken ?? null
+    axiosInstances.set(configId, axiosInstance);
+
+    const applyAccessToken = (token: string | null) => {
+      const defaults = axiosInstance.defaults;
+      defaults.headers = defaults.headers ?? {};
+      if (token) defaults.headers['Authorization'] = `Bearer ${token}`;
+      else
+        delete (defaults.headers as Record<string, unknown>)['Authorization'];
+    };
+    applyAccessTokenFunctions.set(configId, applyAccessToken);
+
+    const tokenManager = new TokenManager(
+      config,
+      () => axiosInstance,
+      applyAccessToken
     );
+    tokenManagers.set(configId, tokenManager);
+
+    const setDefaultHeader = (
+      name: string,
+      value: string | number | boolean | null
+    ) => {
+      const defaults = axiosInstance.defaults;
+      defaults.headers = defaults.headers ?? {};
+      if (value == null)
+        delete (defaults.headers as Record<string, unknown>)[name];
+      else (defaults.headers as Record<string, unknown>)[name] = String(value);
+    };
+    setDefaultHeaderFunctions.set(configId, setDefaultHeader);
+
+    const initialToken =
+      config.multiToken ?
+        (config.tokenCallbacks?.getAccessToken?.() ??
+        config.accessToken ??
+        null)
+      : (config.token ?? null);
+    applyAccessToken(initialToken);
+  });
+
+  const getAccessToken = (
+    configId: CMKey = 'default' as CMKey
+  ): string | null => {
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
+    return config.multiToken ?
+        (config.tokenCallbacks?.getAccessToken?.() ??
+          config.accessToken ??
+          null)
+      : (config.token ?? null);
   };
-  const attachAuthHeader = (reqConfig: AxiosRequestConfig) => {
-    const token = config.multiToken ? getAccessToken() : (config.token ?? null);
+
+  const attachAuthHeader = (
+    reqConfig: AxiosRequestConfig,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
+    const token =
+      config.multiToken ? getAccessToken(configId) : (config.token ?? null);
     if (token) {
       reqConfig.headers = reqConfig.headers ?? {};
       reqConfig.headers['Authorization'] = `Bearer ${token}`;
     }
     return reqConfig;
   };
+
   const performRequest = async <T>(
-    cfg: AxiosRequestConfig
+    cfg: AxiosRequestConfig,
+    configId: CMKey = 'default' as CMKey
   ): Promise<AxiosResponse<T>> => {
-    ensureAxios();
-    return axiosInstance!.request<T>(cfg);
+    const instance = axiosInstances.get(configId);
+    if (!instance) throw new Error(`Axios instance for ${configId} not found`);
+    return instance.request<T>(cfg);
   };
+
   const request = async <T = unknown, D = unknown>(
-    options: RequestOptions<D>,
+    options: RequestOptions<D, CMKey>,
     stateUpdater?: (
       update: Partial<StateData> | ((prev: StateData) => StateData)
     ) => void
   ): Promise<AxiosResponse<T>> => {
+    const configId = (options.configId ?? ('default' as CMKey)) as CMKey;
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
     const {
       method,
       data,
@@ -230,6 +277,7 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
       params,
       responseType,
       timeout,
+      baseURL,
       headers: {
         'Content-Type': contentType as ContentType,
         ...customHeaders
@@ -257,14 +305,13 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
         onDownloadProgress?.(percentCompleted);
       }
     };
-    if (baseURL) requestConfig.baseURL = baseURL;
     if (cancelable && abortController)
       requestConfig.signal = abortController.signal;
-    attachAuthHeader(requestConfig);
+    attachAuthHeader(requestConfig, configId);
     let lastError: AxiosError<T> | null = null;
     for (let attempt = 0; attempt <= retry; attempt++) {
       try {
-        const response = await performRequest<T>(requestConfig);
+        const response = await performRequest<T>(requestConfig, configId);
         if (stateUpdater) {
           stateUpdater({
             isLoading: false,
@@ -302,10 +349,18 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
           config.refreshEndpoint
         ) {
           try {
+            const tokenManager = tokenManagers.get(configId);
+            if (!tokenManager)
+              throw new Error(`Token manager for ${configId} not found`);
             const tokens = await tokenManager.refreshTokens();
-            applyAccessTokenToInstance(tokens.accessToken);
-            attachAuthHeader(requestConfig);
-            const retryResp = await performRequest<T>(requestConfig);
+            const applyAccessToken = applyAccessTokenFunctions.get(configId);
+            if (!applyAccessToken)
+              throw new Error(
+                `Apply access token function for ${configId} not found`
+              );
+            applyAccessToken(tokens.accessToken);
+            attachAuthHeader(requestConfig, configId);
+            const retryResp = await performRequest<T>(requestConfig, configId);
             if (stateUpdater) {
               stateUpdater({
                 isLoading: false,
@@ -369,7 +424,7 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
           const handled = await config.errorHandler(lastError as AxiosError);
           return handled as AxiosResponse<T>;
         } catch {
-          // fallthrough
+          // Ignore errors from the error handler
         }
       }
       throw new RequestError(
@@ -381,12 +436,15 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
     }
     throw new RequestError('Request failed');
   };
+
   const upload = async <T = unknown>(
     url: string,
     formData: FormData,
-    opts?: UploadOptions
+    opts?: UploadOptions<CMKey>
   ): Promise<AxiosResponse<T>> => {
-    ensureAxios();
+    const configId = (opts?.configId ?? ('default' as CMKey)) as CMKey;
+    const instance = axiosInstances.get(configId);
+    if (!instance) throw new Error(`Axios instance for ${configId} not found`);
     const {
       headers = {},
       timeout = 120_000,
@@ -405,6 +463,7 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
         ...headers
       },
       timeout,
+      baseURL,
       onUploadProgress: (ev: AxiosProgressEvent) => {
         const percent = Math.round((ev.loaded * 100) / (ev.total || 1));
         onUploadProgress?.(percent);
@@ -414,12 +473,11 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
         onDownloadProgress?.(percent);
       }
     };
-    if (baseURL) requestConfig.baseURL = baseURL;
     if (cancelable && abortController)
       requestConfig.signal = abortController.signal;
-    attachAuthHeader(requestConfig);
+    attachAuthHeader(requestConfig, configId);
     try {
-      return await axiosInstance!.request<T>(requestConfig);
+      return await instance.request<T>(requestConfig);
     } catch (err) {
       if (axios.isCancel(err)) {
         onCancel?.();
@@ -434,28 +492,54 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
   };
 
   const destroy = () => {
-    tokenManager.clear();
-    axiosInstance = null;
+    tokenManagers.forEach((tm) => tm.clear());
+    axiosInstances.clear();
+    tokenManagers.clear();
+    applyAccessTokenFunctions.clear();
+    setDefaultHeaderFunctions.clear();
     emitter.emit('destroy');
   };
 
   const on = (event: string, fn: EventHandler) => emitter.on(event, fn);
 
-  const setAccessToken = (token: string | null) => {
-    if (config.tokenCallbacks?.setAccessToken)
+  const setAccessToken = (
+    token: string | null,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
+    if (config.tokenCallbacks?.setAccessToken) {
       config.tokenCallbacks.setAccessToken(token);
-    else config.accessToken = token;
-    applyAccessTokenToInstance(token);
+    } else {
+      config.accessToken = token;
+    }
+    const applyAccessToken = applyAccessTokenFunctions.get(configId);
+    if (applyAccessToken) applyAccessToken(token);
   };
 
-  const setRefreshToken = (token: string | null) => {
-    if (config.tokenCallbacks?.setRefreshToken)
+  const setRefreshToken = (
+    token: string | null,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
+    if (config.tokenCallbacks?.setRefreshToken) {
       config.tokenCallbacks.setRefreshToken(token);
-    else config.refreshToken = token;
+    } else {
+      config.refreshToken = token;
+    }
   };
 
-  const setAuthorizationHeader = (token: string | null) => {
-    applyAccessTokenToInstance(token);
+  const setAuthorizationHeader = (
+    token: string | null,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const config = configs[configId];
+    if (!config) throw new Error(`Config ${configId} not found`);
+    const applyAccessToken = applyAccessTokenFunctions.get(configId);
+    if (!applyAccessToken)
+      throw new Error(`Apply access token function for ${configId} not found`);
+    applyAccessToken(token);
     if (token != null) {
       if (config.multiToken) {
         if (config.tokenCallbacks?.setAccessToken)
@@ -475,12 +559,21 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
     }
   };
 
-  const setDefaultHeader = (name: string, value: string | number | boolean) => {
-    setDefaultHeaderOnInstance(name, value);
+  const setDefaultHeader = (
+    name: string,
+    value: string | number | boolean,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const setDefaultHeader = setDefaultHeaderFunctions.get(configId);
+    if (setDefaultHeader) setDefaultHeader(name, value);
   };
 
-  const clearDefaultHeader = (name: string) => {
-    setDefaultHeaderOnInstance(name, null);
+  const clearDefaultHeader = (
+    name: string,
+    configId: CMKey = 'default' as CMKey
+  ) => {
+    const setDefaultHeader = setDefaultHeaderFunctions.get(configId);
+    if (setDefaultHeader) setDefaultHeader(name, null);
   };
 
   return {
@@ -494,10 +587,28 @@ export const createAxlyClient = (config: AxlyConfig): AxlyClient => {
     cancelRequest,
     destroy,
     on
-  };
+  } as unknown as AxlyClient<CMKey>;
 };
 
-export const createAxlyNodeClient = (cfg: AxlyConfig) => {
-  const nodeConfig = { ...cfg, toastHandler: undefined };
-  return createAxlyClient(nodeConfig);
+export const createAxlyNodeClient = <
+  CM extends Record<string, AxlyConfig> = { default: AxlyConfig }
+>(
+  configInput: CM | AxlyConfig
+) => {
+  const configs =
+    (
+      typeof configInput === 'object' &&
+      configInput !== null &&
+      'baseURL' in configInput &&
+      typeof (configInput as any).baseURL === 'string'
+    ) ?
+      ({ default: configInput as AxlyConfig } as unknown as CM)
+    : (configInput as CM);
+  const nodeConfigs: AxlyConfig | CM = Object.fromEntries(
+    Object.entries(configs).map(([k, v]) => [
+      k,
+      { ...v, toastHandler: undefined }
+    ])
+  ) as unknown as CM;
+  return createAxlyClient<CM>(nodeConfigs);
 };

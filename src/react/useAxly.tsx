@@ -1,10 +1,8 @@
 import type { AxiosResponse } from 'axios';
 import { useEffect, useRef, useState } from 'react';
-import type { RequestOptions, StateData } from '../types';
+import type { AxlyClient, RequestOptions, StateData } from '../types';
 
-export const useAxly = (
-  client: ReturnType<typeof import('../client').createAxlyClient>
-) => {
+const useAxly = <C extends string = 'default'>(client: AxlyClient<C>) => {
   const mountedRef = useRef(true);
   const [state, setState] = useState<StateData>({
     isLoading: false,
@@ -19,7 +17,7 @@ export const useAxly = (
     };
   }, []);
   const request = async <T = unknown, D = unknown>(
-    options: RequestOptions<D>
+    options: RequestOptions<D, C>
   ): Promise<AxiosResponse<T>> => {
     const wrappedUpdater = (
       update: Partial<StateData> | ((prev: StateData) => StateData)
@@ -41,3 +39,5 @@ export const useAxly = (
   };
   return { request, cancelRequest: cancel, ...state };
 };
+
+export default useAxly;
