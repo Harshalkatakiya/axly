@@ -25,14 +25,16 @@ React is only required if you use the React hook.
 ### 1) Installation & Setup
 
 ```bash
-npm install axly axios react
+npm install axly
 # or
-yarn add axly axios react
+yarn add axly
 # or
-pnpm add axly axios react
+pnpm add axly
 ```
 
 ### 2) Basic Client Setup
+
+#### Creating a Client Instance
 
 ```ts
 // api/client.ts
@@ -42,6 +44,75 @@ export const apiClient = createAxlyClient({
   baseURL: 'https://api.example.com'
   // Optional: Add default headers
   // Optional: Set up token management
+});
+```
+
+#### Creating Multiple CLient Instance
+
+Axly allows you to manage multiple configurations simultaneously. This is useful when interacting with different APIs.
+
+```ts
+// api/client.ts
+import { createAxlyClient } from 'axly';
+
+export const apiClient = createAxlyClient({
+  mainApi: {
+    baseURL: 'https://api.example.com',
+    token: 'main-api-jwt-token',
+    // Optional: Error handling specific to this API
+    errorHandler: async (error) => {
+      console.error('Main API Error:', error.message);
+      // Return a specific response or re-throw
+      throw error;
+    },
+    // Optional: Toast handler specific to this API (browser only)
+    toastHandler: (message, type) => {
+      // Your toast notification logic
+      console.log(`${type}: ${message}`);
+    }
+  },
+  secondaryApi: {
+    baseURL: 'https://secondary-api.example.com',
+    // Use multiToken pattern for this instance
+    multiToken: true,
+    accessToken: 'secondary-access-token',
+    refreshToken: 'secondary-refresh-token',
+    refreshEndpoint: '/auth/refresh',
+    // Optional: Refresh callbacks for this instance
+    tokenCallbacks: {
+      getAccessToken: () => localStorage.getItem('secondary_access_token'),
+      setAccessToken: (token) =>
+        localStorage.setItem('secondary_access_token', token),
+      getRefreshToken: () => localStorage.getItem('secondary_refresh_token'),
+      setRefreshToken: (token) =>
+        localStorage.setItem('secondary_refresh_token', token)
+    },
+    onRefresh: (tokens) => {
+      localStorage.setItem('secondary_access_token', tokens.accessToken);
+      localStorage.setItem('secondary_refresh_token', tokens.refreshToken);
+    },
+    onRefreshFail: (error) => {
+      console.error('Secondary API refresh failed:', error);
+      // Handle refresh failure, e.g., redirect to login
+    }
+  },
+  thirdPartyApi: {
+    baseURL: 'https://third-party.api.com',
+    // No initial token needed
+    // Can add specific interceptors
+    requestInterceptors: [
+      (config) => {
+        config.headers['X-Client-ID'] = 'your-client-id';
+        return config;
+      }
+    ],
+    responseInterceptors: [
+      (response) => {
+        console.log('Third-party API Response:', response.status);
+        return response;
+      }
+    ]
+  }
 });
 ```
 

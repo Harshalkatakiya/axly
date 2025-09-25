@@ -9,6 +9,7 @@ tsconfig.json
 node_modules/
 bun.lockb
 package-lock.json
+source-snap-*.txt
 # Exclude any development files
 .env
 __tests__/
