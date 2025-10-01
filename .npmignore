@@ -8,6 +8,7 @@ tsconfig.json
 .prettierignore
 node_modules/
 bun.lockb
+bun.lock
 package-lock.json
 source-snap-*.txt
 # Exclude any development files
