@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AxlyClient, RequestOptions, StateData } from '../types';
 
 const useAxly = <C extends string = 'default'>(client: AxlyClient<C>) => {
-  const mountedRef = useRef(true);
+  const mountedRef = useRef<boolean>(true);
   const [state, setState] = useState<StateData>({
     isLoading: false,
     uploadProgress: 0,
