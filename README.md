@@ -1850,7 +1850,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Harshal Katakiya**
 
-- Email: katakiyaharshl001@gmail.com
+- Email: [katakiyaharshl001@gmail.com](mailto:katakiyaharshl001@gmail.com)
 - GitHub: [@Harshalkatakiya](https://github.com/Harshalkatakiya)
 
 ---
