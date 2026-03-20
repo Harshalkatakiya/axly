@@ -6,6 +6,7 @@ const useAxly = <C extends string = 'default'>(client: AxlyClient<C>) => {
   const mountedRef = useRef<boolean>(true);
   const [state, setState] = useState<StateData>({
     isLoading: false,
+    status: 'idle',
     uploadProgress: 0,
     downloadProgress: 0,
     abortController: null

@@ -26,6 +26,20 @@ import {
 } from './utils';
 import { AuthError, CancelledError, RequestError } from './utils/errors';
 
+interface ResponseWithData {
+  message: string;
+}
+
+interface RefreshResponseData {
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+interface CacheEntry<T> {
+  response: AxiosResponse<T>;
+  expiresAt: number;
+}
+
 class Emitter {
   private handlers = new Map<string, EventHandler[]>();
   on(event: string, fn: EventHandler) {
@@ -82,14 +96,13 @@ class TokenManager {
       throw new AuthError('Refresh token is missing.');
     }
     const instance = this.axiosFactory();
-    const resp = await instance.post(
+    const resp = await instance.post<RefreshResponseData>(
       this.config.refreshEndpoint,
       { refreshToken },
       { timeout: this.config.refreshTimeout ?? 10000 }
     );
-    const data = resp.data as { accessToken?: string; refreshToken?: string };
-    const accessToken = data.accessToken;
-    const newRefreshToken = data.refreshToken ?? refreshToken;
+    const { accessToken, refreshToken: newRefreshTokenFromResp } = resp.data;
+    const newRefreshToken = newRefreshTokenFromResp ?? refreshToken;
     if (!accessToken)
       throw new AuthError('Refresh response missing access token');
     if (this.config.tokenCallbacks?.setAccessToken) {
@@ -111,20 +124,46 @@ class TokenManager {
   }
 }
 
+const isAxlyConfig = (input: unknown): input is AxlyConfig =>
+  typeof input === 'object' &&
+  input !== null &&
+  'baseURL' in input &&
+  typeof (input as Record<string, unknown>)['baseURL'] === 'string';
+
+const buildCacheKey = (
+  method: string | undefined,
+  url: string,
+  params: Record<string, string | number | boolean> | undefined,
+  configId: string
+) =>
+  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}`;
+
+const buildDedupeKey = (
+  method: string | undefined,
+  url: string,
+  params: Record<string, string | number | boolean> | undefined,
+  configId: string
+) =>
+  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}`;
+
+const resetState: StateData = {
+  isLoading: false,
+  status: 'idle',
+  uploadProgress: 0,
+  downloadProgress: 0,
+  abortController: null
+};
+
 export const createAxlyClient = <
   CM extends Record<string, AxlyConfig> = { default: AxlyConfig }
 >(
   configInput: CM | AxlyConfig
 ): AxlyClient<keyof CM & string> => {
   const configs: CM =
-    (
-      typeof configInput === 'object' &&
-      configInput !== null &&
-      'baseURL' in configInput &&
-      typeof (configInput as any).baseURL === 'string'
-    ) ?
+    isAxlyConfig(configInput) ?
       ({ default: configInput as AxlyConfig } as unknown as CM)
     : (configInput as CM);
+
   type CMKey = keyof CM & string;
   const emitter = new Emitter();
   const axiosInstances: Map<CMKey, AxiosInstance> = new Map();
@@ -135,6 +174,12 @@ export const createAxlyClient = <
     CMKey,
     (name: string, value: string | number | boolean | null) => void
   > = new Map();
+
+  // Deduplication: in-flight request promises keyed by dedupe key
+  const inflightRequests: Map<string, Promise<AxiosResponse>> = new Map();
+
+  // Cache: stores responses with expiry
+  const responseCache: Map<string, CacheEntry<unknown>> = new Map();
 
   Object.entries(configs).forEach(([cfgId, config]) => {
     const configId = cfgId as CMKey;
@@ -226,6 +271,17 @@ export const createAxlyClient = <
     return instance.request<T>(cfg);
   };
 
+  const applyStateReset = (
+    stateUpdater:
+      | ((
+          update: Partial<StateData> | ((prev: StateData) => StateData)
+        ) => void)
+      | undefined,
+    status: StateData['status']
+  ) => {
+    stateUpdater?.({ ...resetState, status });
+  };
+
   const request = async <T = unknown, D = unknown>(
     options: RequestOptions<D, CMKey>,
     stateUpdater?: (
@@ -256,15 +312,40 @@ export const createAxlyClient = <
       timeout = 100000,
       retry = 0,
       cancelable = false,
-      onCancel
+      onCancel,
+      dedupe = false,
+      cache = false
     } = options;
+
     const effectiveToastHandler: ToastHandler | undefined =
       (isBrowser ? (optionsToastHandler ?? config.toastHandler) : undefined) ??
       undefined;
+
+    // Cache lookup (GET-only)
+    const isGetMethod = (method ?? 'GET').toUpperCase() === 'GET';
+    if (cache && isGetMethod) {
+      const cacheKey = buildCacheKey(method, url, params, configId);
+      const entry = responseCache.get(cacheKey) as CacheEntry<T> | undefined;
+      if (entry && entry.expiresAt > Date.now()) {
+        return entry.response;
+      }
+    }
+
+    // Deduplication: if an identical request is already in-flight, share it
+    const shouldDedupe = dedupe || config.dedupeRequests;
+    if (shouldDedupe && isGetMethod) {
+      const dedupeKey = buildDedupeKey(method, url, params, configId);
+      const inflight = inflightRequests.get(dedupeKey) as
+        | Promise<AxiosResponse<T>>
+        | undefined;
+      if (inflight) return inflight;
+    }
+
     const abortController = cancelable ? new AbortController() : undefined;
     if (stateUpdater) {
       stateUpdater({
         isLoading: true,
+        status: 'loading',
         uploadProgress: 0,
         downloadProgress: 0,
         abortController
@@ -308,133 +389,127 @@ export const createAxlyClient = <
     if (cancelable && abortController)
       requestConfig.signal = abortController.signal;
     attachAuthHeader(requestConfig, configId);
-    let lastError: AxiosError<T> | null = null;
-    for (let attempt = 0; attempt <= retry; attempt++) {
-      try {
-        const response = await performRequest<T>(requestConfig, configId);
-        if (stateUpdater) {
-          stateUpdater({
-            isLoading: false,
-            uploadProgress: 0,
-            downloadProgress: 0,
-            abortController: null
-          });
-        }
-        if (successToast && effectiveToastHandler) {
-          const message =
-            customToastMessage ??
-            (hasMessageInResponse(response.data) ?
-              response.data.message
-            : undefined);
-          if (message) effectiveToastHandler(message, customToastMessageType);
-        }
-        return response;
-      } catch (err) {
-        lastError = err as AxiosError<T>;
-        if (axios.isCancel(err)) {
-          if (stateUpdater)
-            stateUpdater({
-              isLoading: false,
-              uploadProgress: 0,
-              downloadProgress: 0,
-              abortController: null
-            });
-          onCancel?.();
-          throw new CancelledError();
-        }
-        if (
-          axios.isAxiosError(err) &&
-          err.response?.status === 401 &&
-          config.multiToken &&
-          config.refreshEndpoint
-        ) {
-          try {
-            const tokenManager = tokenManagers.get(configId);
-            if (!tokenManager)
-              throw new Error(`Token manager for ${configId} not found`);
-            const tokens = await tokenManager.refreshTokens();
-            const applyAccessToken = applyAccessTokenFunctions.get(configId);
-            if (!applyAccessToken)
-              throw new Error(
-                `Apply access token function for ${configId} not found`
+
+    const handleSuccess = (response: AxiosResponse<T>) => {
+      applyStateReset(stateUpdater, 'success');
+      if (successToast && effectiveToastHandler) {
+        const msg =
+          customToastMessage ??
+          (hasMessageInResponse(response.data) ?
+            (response.data as ResponseWithData).message
+          : undefined);
+        if (msg) effectiveToastHandler(msg, customToastMessageType);
+      }
+      // Store in cache if requested
+      if (cache && isGetMethod) {
+        const cacheKey = buildCacheKey(method, url, params, configId);
+        const ttl =
+          typeof cache === 'object' && cache.ttl != null ? cache.ttl : 300_000; // 5 minutes default
+        responseCache.set(cacheKey, {
+          response,
+          expiresAt: Date.now() + ttl
+        } as CacheEntry<unknown>);
+      }
+      return response;
+    };
+
+    const executeRequest = async (): Promise<AxiosResponse<T>> => {
+      let lastError: AxiosError<T> | null = null;
+      for (let attempt = 0; attempt <= retry; attempt++) {
+        try {
+          const response = await performRequest<T>(requestConfig, configId);
+          return handleSuccess(response);
+        } catch (err) {
+          lastError = err as AxiosError<T>;
+          if (axios.isCancel(err)) {
+            applyStateReset(stateUpdater, 'idle');
+            onCancel?.();
+            throw new CancelledError();
+          }
+          if (
+            axios.isAxiosError(err) &&
+            err.response?.status === 401 &&
+            config.multiToken &&
+            config.refreshEndpoint
+          ) {
+            try {
+              const tokenManager = tokenManagers.get(configId);
+              if (!tokenManager)
+                throw new Error(`Token manager for ${configId} not found`, {
+                  cause: err
+                });
+              const tokens = await tokenManager.refreshTokens();
+              const applyAccessToken = applyAccessTokenFunctions.get(configId);
+              if (!applyAccessToken)
+                throw new Error(
+                  `Apply access token function for ${configId} not found`,
+                  { cause: err }
+                );
+              applyAccessToken(tokens.accessToken);
+              attachAuthHeader(requestConfig, configId);
+              const retryResp = await performRequest<T>(
+                requestConfig,
+                configId
               );
-            applyAccessToken(tokens.accessToken);
-            attachAuthHeader(requestConfig, configId);
-            const retryResp = await performRequest<T>(requestConfig, configId);
-            if (stateUpdater) {
-              stateUpdater({
-                isLoading: false,
-                uploadProgress: 0,
-                downloadProgress: 0,
-                abortController: null
-              });
+              return handleSuccess(retryResp);
+            } catch (refreshErr) {
+              config.onRefreshFail?.(
+                refreshErr instanceof Error ? refreshErr : (
+                  new Error('Refresh failed')
+                )
+              );
+              applyStateReset(stateUpdater, 'error');
+              throw new AuthError('Refresh failed; authentication required');
             }
-            if (successToast && effectiveToastHandler) {
-              const message =
-                customToastMessage ??
-                (hasMessageInResponse(retryResp.data) ?
-                  retryResp.data.message
-                : undefined);
-              if (message)
-                effectiveToastHandler(message, customToastMessageType);
-            }
-            return retryResp;
-          } catch (refreshErr) {
-            config.onRefreshFail?.(
-              refreshErr instanceof Error ? refreshErr : (
-                new Error('Refresh failed')
-              )
-            );
-            if (stateUpdater)
-              stateUpdater({
-                isLoading: false,
-                uploadProgress: 0,
-                downloadProgress: 0,
-                abortController: null
-              });
-            throw new AuthError('Refresh failed; authentication required');
+          }
+          if (attempt < retry) {
+            const backoff = exponentialBackoffWithJitter(attempt);
+            await delay(backoff);
+            continue;
           }
         }
-        if (attempt < retry) {
-          const backoff = exponentialBackoffWithJitter(attempt);
-          await delay(backoff);
-          continue;
-        }
       }
-    }
-    if (stateUpdater)
-      stateUpdater({
-        isLoading: false,
-        uploadProgress: 0,
-        downloadProgress: 0,
-        abortController: null
+      applyStateReset(stateUpdater, 'error');
+      if (lastError) {
+        if (errorToast && effectiveToastHandler) {
+          const responseData = lastError.response?.data;
+          const errorMessage =
+            customErrorToastMessage ??
+            (hasMessageInResponse(responseData) ?
+              (responseData as ResponseWithData).message
+            : undefined) ??
+            'An error occurred';
+          effectiveToastHandler(errorMessage, customErrorToastMessageType);
+        }
+        if (config.errorHandler) {
+          try {
+            const handled = await config.errorHandler(lastError as AxiosError);
+            return handled as AxiosResponse<T>;
+          } catch {
+            // Ignore errors from the error handler
+          }
+        }
+        throw new RequestError(
+          lastError.message || 'Request failed',
+          lastError,
+          lastError.response ?? null,
+          lastError.code ?? null
+        );
+      }
+      throw new RequestError('Request failed');
+    };
+
+    // Register dedupe promise
+    if (shouldDedupe && isGetMethod) {
+      const dedupeKey = buildDedupeKey(method, url, params, configId);
+      const promise = executeRequest().finally(() => {
+        inflightRequests.delete(dedupeKey);
       });
-    if (lastError) {
-      if (errorToast && effectiveToastHandler) {
-        const errorMessage =
-          customErrorToastMessage ??
-          (hasMessageInResponse(lastError.response?.data) ?
-            (lastError.response?.data as any).message
-          : undefined) ??
-          'An error occurred';
-        effectiveToastHandler(errorMessage, customErrorToastMessageType);
-      }
-      if (config.errorHandler) {
-        try {
-          const handled = await config.errorHandler(lastError as AxiosError);
-          return handled as AxiosResponse<T>;
-        } catch {
-          // Ignore errors from the error handler
-        }
-      }
-      throw new RequestError(
-        lastError.message || 'Request failed',
-        lastError,
-        lastError.response ?? null,
-        lastError.code ?? null
-      );
+      inflightRequests.set(dedupeKey, promise as Promise<AxiosResponse>);
+      return promise;
     }
-    throw new RequestError('Request failed');
+
+    return executeRequest();
   };
 
   const upload = async <T = unknown>(
@@ -497,6 +572,8 @@ export const createAxlyClient = <
     tokenManagers.clear();
     applyAccessTokenFunctions.clear();
     setDefaultHeaderFunctions.clear();
+    inflightRequests.clear();
+    responseCache.clear();
     emitter.emit('destroy');
   };
 
@@ -564,16 +641,16 @@ export const createAxlyClient = <
     value: string | number | boolean,
     configId: CMKey = 'default' as CMKey
   ) => {
-    const setDefaultHeader = setDefaultHeaderFunctions.get(configId);
-    if (setDefaultHeader) setDefaultHeader(name, value);
+    const fn = setDefaultHeaderFunctions.get(configId);
+    if (fn) fn(name, value);
   };
 
   const clearDefaultHeader = (
     name: string,
     configId: CMKey = 'default' as CMKey
   ) => {
-    const setDefaultHeader = setDefaultHeaderFunctions.get(configId);
-    if (setDefaultHeader) setDefaultHeader(name, null);
+    const fn = setDefaultHeaderFunctions.get(configId);
+    if (fn) fn(name, null);
   };
 
   return {
@@ -596,18 +673,13 @@ export const createAxlyNodeClient = <
   configInput: CM | AxlyConfig
 ) => {
   const configs =
-    (
-      typeof configInput === 'object' &&
-      configInput !== null &&
-      'baseURL' in configInput &&
-      typeof (configInput as any).baseURL === 'string'
-    ) ?
+    isAxlyConfig(configInput) ?
       ({ default: configInput as AxlyConfig } as unknown as CM)
     : (configInput as CM);
-  const nodeConfigs: AxlyConfig | CM = Object.fromEntries(
+  const nodeConfigs: CM = Object.fromEntries(
     Object.entries(configs).map(([k, v]) => [
       k,
-      { ...v, toastHandler: undefined }
+      { ...(v as AxlyConfig), toastHandler: undefined }
     ])
   ) as unknown as CM;
   return createAxlyClient<CM>(nodeConfigs);
