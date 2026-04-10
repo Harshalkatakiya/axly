@@ -146,6 +146,7 @@ export interface AxlyClient<C extends string = 'default'> {
   ): void;
   clearDefaultHeader(name: string, configId?: C): void;
   cancelRequest(controller?: AbortController | null): void;
+  clearCache(configId?: C): void;
   destroy(): void;
   on(event: string, handler: (...args: unknown[]) => void): () => void;
 }

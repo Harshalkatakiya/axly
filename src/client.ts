@@ -17,14 +17,15 @@ import {
   StateData,
   ToastHandler,
   UploadOptions
-} from './types';
+} from './types/index.js';
 import {
   delay,
   exponentialBackoffWithJitter,
   hasMessageInResponse,
-  isBrowser
-} from './utils';
-import { AuthError, CancelledError, RequestError } from './utils/errors';
+  isBrowser,
+  sanitizeToastMessage
+} from './utils/index.js';
+import { AuthError, CancelledError, RequestError } from './utils/errors.js';
 
 interface ResponseWithData {
   message: string;
@@ -130,27 +131,28 @@ const isAxlyConfig = (input: unknown): input is AxlyConfig =>
   'baseURL' in input &&
   typeof (input as Record<string, unknown>)['baseURL'] === 'string';
 
-const buildCacheKey = (
+const buildRequestKey = (
   method: string | undefined,
   url: string,
   params: Record<string, string | number | boolean> | undefined,
-  configId: string
+  configId: string,
+  customHeaders?: Record<string, string>
 ) =>
-  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}`;
-
-const buildDedupeKey = (
-  method: string | undefined,
-  url: string,
-  params: Record<string, string | number | boolean> | undefined,
-  configId: string
-) =>
-  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}`;
+  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}:${JSON.stringify(customHeaders ?? {})}`;
 
 const resetState: StateData = {
   isLoading: false,
   status: 'idle',
   uploadProgress: 0,
   downloadProgress: 0,
+  abortController: null
+};
+
+const successState: StateData = {
+  isLoading: false,
+  status: 'success',
+  uploadProgress: 100,
+  downloadProgress: 100,
   abortController: null
 };
 
@@ -180,6 +182,16 @@ export const createAxlyClient = <
 
   // Cache: stores responses with expiry
   const responseCache: Map<string, CacheEntry<unknown>> = new Map();
+
+  // Periodic cache sweep to evict expired entries
+  const cacheSweepInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of responseCache) {
+      if ((entry as CacheEntry<unknown>).expiresAt <= now) {
+        responseCache.delete(key);
+      }
+    }
+  }, 60_000);
 
   Object.entries(configs).forEach(([cfgId, config]) => {
     const configId = cfgId as CMKey;
@@ -279,7 +291,9 @@ export const createAxlyClient = <
       | undefined,
     status: StateData['status']
   ) => {
-    stateUpdater?.({ ...resetState, status });
+    stateUpdater?.(
+      status === 'success' ? successState : { ...resetState, status }
+    );
   };
 
   const request = async <T = unknown, D = unknown>(
@@ -324,17 +338,32 @@ export const createAxlyClient = <
     // Cache lookup (GET-only)
     const isGetMethod = (method ?? 'GET').toUpperCase() === 'GET';
     if (cache && isGetMethod) {
-      const cacheKey = buildCacheKey(method, url, params, configId);
+      const cacheKey = buildRequestKey(
+        method,
+        url,
+        params,
+        configId,
+        customHeaders
+      );
       const entry = responseCache.get(cacheKey) as CacheEntry<T> | undefined;
-      if (entry && entry.expiresAt > Date.now()) {
-        return entry.response;
+      if (entry) {
+        if (entry.expiresAt > Date.now()) {
+          return entry.response;
+        }
+        responseCache.delete(cacheKey);
       }
     }
 
     // Deduplication: if an identical request is already in-flight, share it
     const shouldDedupe = dedupe || config.dedupeRequests;
     if (shouldDedupe && isGetMethod) {
-      const dedupeKey = buildDedupeKey(method, url, params, configId);
+      const dedupeKey = buildRequestKey(
+        method,
+        url,
+        params,
+        configId,
+        customHeaders
+      );
       const inflight = inflightRequests.get(dedupeKey) as
         | Promise<AxiosResponse<T>>
         | undefined;
@@ -398,11 +427,21 @@ export const createAxlyClient = <
           (hasMessageInResponse(response.data) ?
             (response.data as ResponseWithData).message
           : undefined);
-        if (msg) effectiveToastHandler(msg, customToastMessageType);
+        if (msg)
+          effectiveToastHandler(
+            sanitizeToastMessage(msg),
+            customToastMessageType
+          );
       }
       // Store in cache if requested
       if (cache && isGetMethod) {
-        const cacheKey = buildCacheKey(method, url, params, configId);
+        const cacheKey = buildRequestKey(
+          method,
+          url,
+          params,
+          configId,
+          customHeaders
+        );
         const ttl =
           typeof cache === 'object' && cache.ttl != null ? cache.ttl : 300_000; // 5 minutes default
         responseCache.set(cacheKey, {
@@ -413,7 +452,7 @@ export const createAxlyClient = <
       return response;
     };
 
-    const executeRequest = async (): Promise<AxiosResponse<T>> => {
+    const executeWithRetry = async (): Promise<AxiosResponse<T>> => {
       let lastError: AxiosError<T> | null = null;
       for (let attempt = 0; attempt <= retry; attempt++) {
         try {
@@ -425,42 +464,6 @@ export const createAxlyClient = <
             applyStateReset(stateUpdater, 'idle');
             onCancel?.();
             throw new CancelledError();
-          }
-          if (
-            axios.isAxiosError(err) &&
-            err.response?.status === 401 &&
-            config.multiToken &&
-            config.refreshEndpoint
-          ) {
-            try {
-              const tokenManager = tokenManagers.get(configId);
-              if (!tokenManager)
-                throw new Error(`Token manager for ${configId} not found`, {
-                  cause: err
-                });
-              const tokens = await tokenManager.refreshTokens();
-              const applyAccessToken = applyAccessTokenFunctions.get(configId);
-              if (!applyAccessToken)
-                throw new Error(
-                  `Apply access token function for ${configId} not found`,
-                  { cause: err }
-                );
-              applyAccessToken(tokens.accessToken);
-              attachAuthHeader(requestConfig, configId);
-              const retryResp = await performRequest<T>(
-                requestConfig,
-                configId
-              );
-              return handleSuccess(retryResp);
-            } catch (refreshErr) {
-              config.onRefreshFail?.(
-                refreshErr instanceof Error ? refreshErr : (
-                  new Error('Refresh failed')
-                )
-              );
-              applyStateReset(stateUpdater, 'error');
-              throw new AuthError('Refresh failed; authentication required');
-            }
           }
           if (attempt < retry) {
             const backoff = exponentialBackoffWithJitter(attempt);
@@ -479,7 +482,10 @@ export const createAxlyClient = <
               (responseData as ResponseWithData).message
             : undefined) ??
             'An error occurred';
-          effectiveToastHandler(errorMessage, customErrorToastMessageType);
+          effectiveToastHandler(
+            sanitizeToastMessage(errorMessage),
+            customErrorToastMessageType
+          );
         }
         if (config.errorHandler) {
           try {
@@ -499,9 +505,58 @@ export const createAxlyClient = <
       throw new RequestError('Request failed');
     };
 
+    const executeRequest = async (): Promise<AxiosResponse<T>> => {
+      try {
+        return await executeWithRetry();
+      } catch (err) {
+        // Handle 401 with token refresh — only once, outside the retry loop
+        if (
+          axios.isAxiosError(err) &&
+          err.response?.status === 401 &&
+          config.multiToken &&
+          config.refreshEndpoint
+        ) {
+          try {
+            const tokenManager = tokenManagers.get(configId);
+            if (!tokenManager)
+              throw new Error(`Token manager for ${configId} not found`, {
+                cause: err
+              });
+            const tokens = await tokenManager.refreshTokens();
+            const applyAccessToken = applyAccessTokenFunctions.get(configId);
+            if (!applyAccessToken)
+              throw new Error(
+                `Apply access token function for ${configId} not found`,
+                { cause: err }
+              );
+            applyAccessToken(tokens.accessToken);
+            attachAuthHeader(requestConfig, configId);
+            return await executeWithRetry();
+          } catch (refreshErr) {
+            if (refreshErr instanceof CancelledError) throw refreshErr;
+            if (refreshErr instanceof RequestError) throw refreshErr;
+            config.onRefreshFail?.(
+              refreshErr instanceof Error ? refreshErr : (
+                new Error('Refresh failed')
+              )
+            );
+            applyStateReset(stateUpdater, 'error');
+            throw new AuthError('Refresh failed; authentication required');
+          }
+        }
+        throw err;
+      }
+    };
+
     // Register dedupe promise
     if (shouldDedupe && isGetMethod) {
-      const dedupeKey = buildDedupeKey(method, url, params, configId);
+      const dedupeKey = buildRequestKey(
+        method,
+        url,
+        params,
+        configId,
+        customHeaders
+      );
       const promise = executeRequest().finally(() => {
         inflightRequests.delete(dedupeKey);
       });
@@ -551,12 +606,47 @@ export const createAxlyClient = <
     if (cancelable && abortController)
       requestConfig.signal = abortController.signal;
     attachAuthHeader(requestConfig, configId);
+    const config = configs[configId];
+    const performUpload = async (): Promise<AxiosResponse<T>> => {
+      try {
+        return await instance.request<T>(requestConfig);
+      } catch (err) {
+        if (axios.isCancel(err)) {
+          onCancel?.();
+          throw new CancelledError();
+        }
+        throw err;
+      }
+    };
+
     try {
-      return await instance.request<T>(requestConfig);
+      return await performUpload();
     } catch (err) {
-      if (axios.isCancel(err)) {
-        onCancel?.();
-        throw new CancelledError();
+      // Handle 401 with token refresh — one attempt
+      if (
+        config &&
+        axios.isAxiosError(err) &&
+        err.response?.status === 401 &&
+        config.multiToken &&
+        config.refreshEndpoint
+      ) {
+        try {
+          const tokenManager = tokenManagers.get(configId);
+          if (!tokenManager) throw err;
+          const tokens = await tokenManager.refreshTokens();
+          const applyAccessToken = applyAccessTokenFunctions.get(configId);
+          if (applyAccessToken) applyAccessToken(tokens.accessToken);
+          attachAuthHeader(requestConfig, configId);
+          return await performUpload();
+        } catch (refreshErr) {
+          if (refreshErr instanceof CancelledError) throw refreshErr;
+          config.onRefreshFail?.(
+            refreshErr instanceof Error ? refreshErr : (
+              new Error('Refresh failed')
+            )
+          );
+          throw new AuthError('Refresh failed; authentication required');
+        }
       }
       throw err;
     }
@@ -566,7 +656,23 @@ export const createAxlyClient = <
     if (controller) controller.abort();
   };
 
+  const clearCache = (configId?: CMKey) => {
+    if (configId) {
+      const suffix = `:${configId}:`;
+      for (const key of responseCache.keys()) {
+        if (key.includes(suffix)) responseCache.delete(key);
+      }
+      for (const key of inflightRequests.keys()) {
+        if (key.includes(suffix)) inflightRequests.delete(key);
+      }
+    } else {
+      responseCache.clear();
+      inflightRequests.clear();
+    }
+  };
+
   const destroy = () => {
+    clearInterval(cacheSweepInterval);
     tokenManagers.forEach((tm) => tm.clear());
     axiosInstances.clear();
     tokenManagers.clear();
@@ -653,7 +759,7 @@ export const createAxlyClient = <
     if (fn) fn(name, null);
   };
 
-  return {
+  const client: AxlyClient<CMKey> = {
     request,
     upload,
     setAccessToken,
@@ -662,9 +768,11 @@ export const createAxlyClient = <
     setDefaultHeader,
     clearDefaultHeader,
     cancelRequest,
+    clearCache,
     destroy,
     on
-  } as unknown as AxlyClient<CMKey>;
+  };
+  return client;
 };
 
 export const createAxlyNodeClient = <

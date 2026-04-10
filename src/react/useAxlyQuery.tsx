@@ -6,7 +6,7 @@ import type {
   AxlyQueryResult,
   RequestOptions,
   RequestStatus
-} from '../types';
+} from '../types/index.js';
 
 const useAxlyQuery = <T = unknown, D = unknown, C extends string = 'default'>(
   options: AxlyQueryOptions<T, D, C>
@@ -29,6 +29,10 @@ const useAxlyQuery = <T = unknown, D = unknown, C extends string = 'default'>(
   const mountedRef = useRef(true);
   const requestRef = useRef<RequestOptions<D, C>>(request);
   requestRef.current = request;
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   const fetch = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -42,18 +46,18 @@ const useAxlyQuery = <T = unknown, D = unknown, C extends string = 'default'>(
       setData(response);
       setError(null);
       setStatus('success');
-      onSuccess?.(response);
+      onSuccessRef.current?.(response);
     } catch (err) {
       if (!mountedRef.current) return;
       const normalizedError =
         err instanceof Error ? err : new Error(String(err));
       setError(normalizedError);
       setStatus('error');
-      onError?.(normalizedError);
+      onErrorRef.current?.(normalizedError);
     } finally {
       if (mountedRef.current) setIsFetching(false);
     }
-  }, [client, onSuccess, onError]);
+  }, [client]);
 
   useEffect(() => {
     mountedRef.current = true;

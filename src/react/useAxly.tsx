@@ -1,6 +1,6 @@
 import type { AxiosResponse } from 'axios';
 import { useEffect, useRef, useState } from 'react';
-import type { AxlyClient, RequestOptions, StateData } from '../types';
+import type { AxlyClient, RequestOptions, StateData } from '../types/index.js';
 
 const useAxly = <C extends string = 'default'>(client: AxlyClient<C>) => {
   const mountedRef = useRef<boolean>(true);

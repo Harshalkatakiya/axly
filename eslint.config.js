@@ -1,58 +1,33 @@
-import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import typescriptPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 import prettierPlugin from 'eslint-plugin-prettier';
+import eslintConfigPrettier from 'eslint-config-prettier';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
-import globals from 'globals';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all
-});
+import tseslint from 'typescript-eslint';
 
 /** @type {import('eslint').Linter.Config[]} */
-export default [
-  ...compat.extends(
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended',
-    'eslint-config-prettier'
-  ),
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  eslintConfigPrettier,
   {
+    files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      parser: tsParser,
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-        AbortController: 'readonly'
-      },
       parserOptions: {
-        ecmaFeatures: {
-          jsx: true
-        },
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        tsconfigRootDir: __dirname,
-        project: './tsconfig.json'
+        ecmaFeatures: { jsx: true },
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname
       }
     },
     plugins: {
-      '@typescript-eslint': typescriptPlugin,
       prettier: prettierPlugin,
       'react-hooks': reactHooksPlugin
     },
     rules: {
       'prettier/prettier': 'error',
       '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
@@ -62,14 +37,6 @@ export default [
     }
   },
   {
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off'
-    }
-  },
-  {
-    files: ['./src/**/*.{js,mjs,cjs,ts,tsx}']
-  },
-  {
-    ignores: ['./dist', './build', './node_modules']
+    ignores: ['dist/', 'build/', 'node_modules/']
   }
-];
+);

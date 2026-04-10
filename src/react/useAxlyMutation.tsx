@@ -1,11 +1,11 @@
 import type { AxiosResponse } from 'axios';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AxlyMutationOptions,
   AxlyMutationResult,
   RequestOptions,
   RequestStatus
-} from '../types';
+} from '../types/index.js';
 
 const useAxlyMutation = <
   T = unknown,
@@ -21,6 +21,19 @@ const useAxlyMutation = <
   const [status, setStatus] = useState<RequestStatus>('idle');
 
   const mountedRef = useRef(true);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const mutateAsync = useCallback(
     async (requestOptions: RequestOptions<D, C>): Promise<AxiosResponse<T>> => {
@@ -32,8 +45,8 @@ const useAxlyMutation = <
           setData(response);
           setStatus('success');
         }
-        onSuccess?.(response);
-        onSettled?.(response, null);
+        onSuccessRef.current?.(response);
+        onSettledRef.current?.(response, null);
         return response;
       } catch (err) {
         const normalizedError =
@@ -42,12 +55,12 @@ const useAxlyMutation = <
           setError(normalizedError);
           setStatus('error');
         }
-        onError?.(normalizedError);
-        onSettled?.(null, normalizedError);
+        onErrorRef.current?.(normalizedError);
+        onSettledRef.current?.(null, normalizedError);
         throw normalizedError;
       }
     },
-    [client, onSuccess, onError, onSettled]
+    [client]
   );
 
   const mutate = useCallback(

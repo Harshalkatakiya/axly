@@ -7,10 +7,13 @@ export const isObject = (v: unknown): v is Record<string, unknown> =>
 export const hasMessageInResponse = (
   data: unknown
 ): data is { message: string } =>
-  isObject(data) && typeof (data as any).message === 'string';
+  isObject(data) && typeof data['message'] === 'string';
 
 export const isBrowser =
   typeof window !== 'undefined' && typeof window.document !== 'undefined';
+
+export const sanitizeToastMessage = (message: string): string =>
+  message.replace(/<[^>]*>/g, '').trim();
 
 export const exponentialBackoffWithJitter = (
   attempt: number,
