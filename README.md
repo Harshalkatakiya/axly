@@ -38,6 +38,7 @@ Axly is a powerful and flexible HTTP client library built on top of Axios, desig
   - [File Upload](#file-upload)
   - [Request Cancellation](#request-cancellation)
   - [Retry Logic](#retry-logic)
+  - [Custom Auth Scheme](#custom-auth-scheme)
   - [Toast Notifications](#toast-notifications)
   - [Error Handling](#error-handling)
   - [Multiple API Configurations](#multiple-api-configurations)
@@ -297,23 +298,25 @@ createAxlyClient<ConfigMap>(config: AxlyConfig | ConfigMap): AxlyClient
 
 #### AxlyConfig Options
 
-| Option                 | Type             | Default | Description                                   |
-| ---------------------- | ---------------- | ------- | --------------------------------------------- |
-| `baseURL`              | `string`         | —       | Base URL for all requests **(required)**      |
-| `token`                | `string \| null` | —       | Single auth token (Bearer)                    |
-| `multiToken`           | `boolean`        | `false` | Enable access + refresh token mode            |
-| `accessToken`          | `string \| null` | —       | Access token for multi-token mode             |
-| `refreshToken`         | `string \| null` | —       | Refresh token for multi-token mode            |
-| `refreshEndpoint`      | `string`         | —       | Endpoint for token refresh                    |
-| `refreshTimeout`       | `number`         | `10000` | Timeout (ms) for refresh requests             |
-| `toastHandler`         | `ToastHandler`   | —       | Toast notification function (browser-only)    |
-| `tokenCallbacks`       | `TokenCallbacks` | —       | Custom getters/setters for tokens             |
-| `requestInterceptors`  | `Array`          | —       | Axios request interceptors                    |
-| `responseInterceptors` | `Array`          | —       | Axios response interceptors                   |
-| `errorHandler`         | `Function`       | —       | Custom error handler for all requests         |
-| `onRefresh`            | `Function`       | —       | Callback when tokens refresh                  |
-| `onRefreshFail`        | `Function`       | —       | Callback when token refresh fails             |
-| `dedupeRequests`       | `boolean`        | `false` | Deduplicate identical concurrent GET requests |
+| Option                 | Type                    | Default    | Description                                                                 |
+| ---------------------- | ----------------------- | ---------- | --------------------------------------------------------------------------- |
+| `baseURL`              | `string`                | —          | Base URL for all requests **(required)**                                    |
+| `token`                | `string \| null`        | —          | Single auth token (single-token mode)                                       |
+| `multiToken`           | `boolean`               | `false`    | Enable access + refresh token mode                                          |
+| `accessToken`          | `string \| null`        | —          | Access token for multi-token mode                                           |
+| `refreshToken`         | `string \| null`        | —          | Refresh token for multi-token mode                                          |
+| `refreshEndpoint`      | `string`                | —          | Endpoint for token refresh                                                  |
+| `refreshTimeout`       | `number`                | `10000`    | Timeout (ms) for refresh requests                                           |
+| `authScheme`           | `string \| null`        | `'Bearer'` | Prefix for the Authorization header. `null`/`''` sends the token raw        |
+| `toastHandler`         | `ToastHandler`          | —          | Toast notification function (browser-only)                                  |
+| `tokenCallbacks`       | `TokenCallbacks`        | —          | Custom getters/setters for tokens                                           |
+| `requestInterceptors`  | `Array`                 | —          | Axios request interceptors                                                  |
+| `responseInterceptors` | `Array`                 | —          | Axios response interceptors                                                 |
+| `errorHandler`         | `Function`              | —          | Custom error handler for all requests                                       |
+| `onRefresh`            | `Function`              | —          | Callback when tokens refresh                                                |
+| `onRefreshFail`        | `Function`              | —          | Callback when token refresh fails                                           |
+| `dedupeRequests`       | `boolean`               | `false`    | Deduplicate identical concurrent GET requests                               |
+| `shouldRetry`          | `ShouldRetry \| undef.` | —          | Predicate `(err, attempt) => boolean`. Defaults to network + 5xx + 408/429. |
 
 ---
 
@@ -342,36 +345,37 @@ const response = await client.request<User>({
 
 #### RequestOptions
 
-| Option                        | Type                        | Default            | Description                                   |
-| ----------------------------- | --------------------------- | ------------------ | --------------------------------------------- |
-| `method`                      | `string`                    | —                  | HTTP method **(required)**                    |
-| `url`                         | `string`                    | —                  | Endpoint URL **(required)**                   |
-| `data`                        | `D`                         | —                  | Request body                                  |
-| `params`                      | `Record<string, ...>`       | —                  | Query parameters                              |
-| `contentType`                 | `ContentType`               | `application/json` | Content-Type header                           |
-| `customHeaders`               | `Record<string, string>`    | —                  | Additional headers                            |
-| `responseType`                | `string`                    | `json`             | Axios response type                           |
-| `baseURL`                     | `string`                    | —                  | Override the client base URL                  |
-| `timeout`                     | `number`                    | `100000`           | Request timeout (ms)                          |
-| `retry`                       | `number`                    | `0`                | Number of retry attempts                      |
-| `cancelable`                  | `boolean`                   | `false`            | Enable abort via `AbortController`            |
-| `onCancel`                    | `() => void`                | —                  | Callback when request is cancelled            |
-| `dedupe`                      | `boolean`                   | `false`            | Deduplicate this GET request if in-flight     |
-| `cache`                       | `boolean \| CacheOptions`   | `false`            | Cache response; `{ ttl?: number }` in ms      |
-| `successToast`                | `boolean`                   | `false`            | Show success toast                            |
-| `errorToast`                  | `boolean`                   | `false`            | Show error toast                              |
-| `customToastMessage`          | `string`                    | —                  | Override success toast message                |
-| `customToastMessageType`      | `CustomToastMessageType`    | `success`          | Toast type for success                        |
-| `customErrorToastMessage`     | `string`                    | —                  | Override error toast message                  |
-| `customErrorToastMessageType` | `CustomToastMessageType`    | `error`            | Toast type for error                          |
-| `onUploadProgress`            | `(percent: number) => void` | —                  | Upload progress callback                      |
-| `onDownloadProgress`          | `(percent: number) => void` | —                  | Download progress callback                    |
-| `toastHandler`                | `ToastHandler`              | —                  | Override the client toast handler per-request |
-| `configId`                    | `string`                    | `default`          | Which config to use in multi-config setup     |
+| Option                        | Type                        | Default            | Description                                                        |
+| ----------------------------- | --------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `method`                      | `string`                    | —                  | HTTP method **(required)**                                         |
+| `url`                         | `string`                    | —                  | Endpoint URL **(required)**                                        |
+| `data`                        | `D`                         | —                  | Request body                                                       |
+| `params`                      | `Record<string, ...>`       | —                  | Query parameters                                                   |
+| `contentType`                 | `ContentType`               | `application/json` | Content-Type header                                                |
+| `customHeaders`               | `Record<string, string>`    | —                  | Additional headers                                                 |
+| `responseType`                | `string`                    | `json`             | Axios response type                                                |
+| `baseURL`                     | `string`                    | —                  | Override the client base URL                                       |
+| `timeout`                     | `number`                    | `100000`           | Request timeout (ms)                                               |
+| `retry`                       | `number`                    | `0`                | Number of retry attempts                                           |
+| `cancelable`                  | `boolean`                   | `false`            | Enable abort via `AbortController`                                 |
+| `onCancel`                    | `() => void`                | —                  | Callback when request is cancelled                                 |
+| `dedupe`                      | `boolean`                   | `false`            | Deduplicate this GET request if another identical one is in-flight |
+| `cache`                       | `boolean \| CacheOptions`   | `false`            | Cache GET response; `{ ttl?, staleWhileRevalidate? }` in ms        |
+| `shouldRetry`                 | `ShouldRetry`               | —                  | Per-request retry predicate (overrides config)                     |
+| `successToast`                | `boolean`                   | `false`            | Show success toast                                                 |
+| `errorToast`                  | `boolean`                   | `false`            | Show error toast                                                   |
+| `customToastMessage`          | `string`                    | —                  | Override success toast message                                     |
+| `customToastMessageType`      | `CustomToastMessageType`    | `success`          | Toast type for success                                             |
+| `customErrorToastMessage`     | `string`                    | —                  | Override error toast message                                       |
+| `customErrorToastMessageType` | `CustomToastMessageType`    | `error`            | Toast type for error                                               |
+| `onUploadProgress`            | `(percent: number) => void` | —                  | Upload progress callback                                           |
+| `onDownloadProgress`          | `(percent: number) => void` | —                  | Download progress callback                                         |
+| `toastHandler`                | `ToastHandler`              | —                  | Override the client toast handler per-request                      |
+| `configId`                    | `string`                    | `default`          | Which config to use in multi-config setup                          |
 
 #### `upload<T>(url, formData, opts?)`
 
-Upload a file. Automatically sets `Content-Type: multipart/form-data`.
+Upload a file. `upload()` is a thin wrapper around `request()` — it inherits retry, toast, dedupe, and state-tracking. It does **not** set `Content-Type` explicitly; axios auto-sets `multipart/form-data; boundary=...` when it detects `FormData`.
 
 ```typescript
 const form = new FormData();
@@ -383,32 +387,52 @@ const response = await client.upload<{ url: string }>('/upload', form, {
 
 #### UploadOptions
 
-| Option               | Type                        | Description                               |
-| -------------------- | --------------------------- | ----------------------------------------- |
-| `headers`            | `Record<string, string>`    | Additional request headers                |
-| `timeout`            | `number`                    | Request timeout in ms                     |
-| `onUploadProgress`   | `(percent: number) => void` | Upload progress callback                  |
-| `onDownloadProgress` | `(percent: number) => void` | Download progress callback                |
-| `baseURL`            | `string`                    | Override the client base URL              |
-| `cancelable`         | `boolean`                   | Enable abort via `AbortController`        |
-| `onCancel`           | `() => void`                | Callback when upload is cancelled         |
-| `configId`           | `string`                    | Which config to use in multi-config setup |
+| Option                        | Type                        | Description                                       |
+| ----------------------------- | --------------------------- | ------------------------------------------------- |
+| `headers`                     | `Record<string, string>`    | Additional request headers                        |
+| `timeout`                     | `number`                    | Request timeout in ms (default `120_000`)         |
+| `onUploadProgress`            | `(percent: number) => void` | Upload progress callback                          |
+| `onDownloadProgress`          | `(percent: number) => void` | Download progress callback                        |
+| `baseURL`                     | `string`                    | Override the client base URL                      |
+| `cancelable`                  | `boolean`                   | Enable abort via `AbortController`                |
+| `onCancel`                    | `() => void`                | Callback when upload is cancelled                 |
+| `configId`                    | `string`                    | Which config to use in multi-config setup         |
+| `retry`                       | `number`                    | Retry attempts (pass `0` for v2-style no retries) |
+| `shouldRetry`                 | `ShouldRetry`               | Custom retry predicate                            |
+| `toastHandler`                | `ToastHandler`              | Override the client toast handler                 |
+| `successToast`                | `boolean`                   | Show success toast                                |
+| `errorToast`                  | `boolean`                   | Show error toast                                  |
+| `customToastMessage`          | `string`                    | Override success toast message                    |
+| `customToastMessageType`      | `CustomToastMessageType`    | Toast type for success                            |
+| `customErrorToastMessage`     | `string`                    | Override error toast message                      |
+| `customErrorToastMessageType` | `CustomToastMessageType`    | Toast type for error                              |
 
 #### Token & Header Methods
 
 ```typescript
-client.setAccessToken('new-token', 'configId'); // Set access token
+client.setAccessToken('new-token', 'configId'); // Set access token (updates storage + axios defaults)
 client.setRefreshToken('refresh-token', 'configId'); // Set refresh token
-client.setAuthorizationHeader('token', 'configId'); // Set Authorization header directly
 client.setDefaultHeader('X-Custom', 'value', 'configId'); // Set a default header
 client.clearDefaultHeader('X-Custom', 'configId'); // Remove a default header
 ```
+
+#### Cache Invalidation
+
+```typescript
+client.invalidate(); // Clear everything (all configs)
+client.invalidate({ configId: 'mainAPI' }); // Clear all entries for one config
+client.invalidate({ url: '/users' }); // Clear entries whose key contains '/users'
+client.invalidate({ url: /\/users\/\d+/ }); // Regex match against cache keys
+client.invalidate({ predicate: (key) => key.startsWith('GET:') }); // Arbitrary predicate
+```
+
+When multiple fields are provided, they combine with AND semantics (all matchers must pass). Invalidation clears **both** the response cache and any in-flight deduped requests.
 
 #### Other Methods
 
 ```typescript
 client.cancelRequest(abortController); // Cancel a specific request
-client.destroy(); // Cleanup all instances and caches
+client.destroy(); // Cleanup all instances, caches, and timers
 client.on('destroy', () => {}); // Listen to events
 ```
 
@@ -621,6 +645,56 @@ await client.request({
 });
 ```
 
+#### Stale-While-Revalidate
+
+Serve a stale cached response immediately while refreshing in the background:
+
+```typescript
+// Fresh for 60s; serve stale for up to 5 more minutes while refreshing
+await client.request({
+  method: 'GET',
+  url: '/config',
+  cache: {
+    ttl: 60_000,
+    staleWhileRevalidate: 300_000
+  }
+});
+```
+
+Semantics:
+
+- `now < expiresAt` → return cached response (fresh)
+- `now < expiresAt + staleWhileRevalidate` → return cached response (stale) AND fire a background refresh; errors from the background refresh are swallowed
+- Otherwise → full network request
+
+The background refresh is deduplicated per cache key — only one refresh runs at a time even under concurrent reads.
+
+#### Pattern-Based Cache Invalidation
+
+Clear cached entries by URL pattern, config, or arbitrary predicate:
+
+```typescript
+// After mutating a user, clear all cached GETs that touch that path
+await client.request({
+  method: 'PATCH',
+  url: '/users/42',
+  data: { name: 'Jane' }
+});
+client.invalidate({ url: '/users/42' });
+
+// Clear every /users/* entry
+client.invalidate({ url: /\/users\// });
+
+// Clear by config
+client.invalidate({ configId: 'mainAPI' });
+
+// Arbitrary predicate — e.g. drop every non-GET entry (shouldn't exist, but illustrative)
+client.invalidate({ predicate: (key) => !key.startsWith('GET:') });
+
+// Clear everything (cache + in-flight dedupes, all configs)
+client.invalidate();
+```
+
 ### Progress Tracking
 
 ```tsx
@@ -671,6 +745,8 @@ const search = async (query: string) => {
 
 ### Retry Logic
 
+By default, axly retries on transient failures only: network errors (`ERR_NETWORK`, `ECONNABORTED`, `ETIMEDOUT`), HTTP 5xx, HTTP 408, and HTTP 429.
+
 ```typescript
 // Retry up to 3 times with exponential backoff + jitter
 await client.request({
@@ -680,6 +756,77 @@ await client.request({
 });
 // Delays: ~500ms, ~1000ms, ~2000ms (with random jitter)
 ```
+
+#### Custom retry predicate (`shouldRetry`)
+
+Take full control over which errors retry and which fail fast:
+
+```typescript
+// Per-request: retry only on 503, up to 5 times
+await client.request({
+  method: 'GET',
+  url: '/flaky',
+  retry: 5,
+  shouldRetry: (err, attempt) => err.response?.status === 503
+});
+
+// Per-config: retry everything except 4xx (v2-style aggressive retrying, but skip auth/validation errors)
+const client = createAxlyClient({
+  baseURL: 'https://api.example.com',
+  shouldRetry: (err) => {
+    const status = err.response?.status;
+    if (status != null && status >= 400 && status < 500) return false;
+    return true;
+  }
+});
+
+// Restore exact v2 behavior (retry on any error)
+const legacyClient = createAxlyClient({
+  baseURL: 'https://api.example.com',
+  shouldRetry: () => true
+});
+```
+
+**Precedence:** per-request `shouldRetry` > per-config `shouldRetry` > default predicate.
+
+#### Interaction with 401 token refresh
+
+When `multiToken` + `refreshEndpoint` are configured and the server returns 401, axly refreshes the token on the **first** 401 (not after exhausting retries) and then retries the request with the fresh token. Retries after a successful refresh use your normal `retry`/`shouldRetry` budget.
+
+### Custom Auth Scheme
+
+The default `Authorization` header is `Bearer <token>`. Override with `authScheme`:
+
+```typescript
+// Default — emits "Authorization: Bearer abc123"
+const client = createAxlyClient({
+  baseURL: 'https://api.example.com',
+  token: 'abc123'
+});
+
+// GitHub-style — emits "Authorization: token abc123"
+const githubClient = createAxlyClient({
+  baseURL: 'https://api.github.com',
+  token: 'abc123',
+  authScheme: 'token'
+});
+
+// Raw token — emits "Authorization: abc123" (no prefix)
+const rawClient = createAxlyClient({
+  baseURL: 'https://api.example.com',
+  token: 'abc123',
+  authScheme: null
+});
+
+// AWS-style — emits "Authorization: AWS4-HMAC-SHA256 <sig>"
+const awsClient = createAxlyClient({
+  baseURL: 'https://s3.example.com',
+  token: '<sig>',
+  authScheme: 'AWS4-HMAC-SHA256'
+});
+```
+
+`authScheme` applies to both the initial header and any headers written by `setAccessToken` / automatic refresh flows.
 
 ### Toast Notifications
 
@@ -881,6 +1028,34 @@ const { data } = useAxlyQuery<User[]>({
   request: { method: 'GET', url: '/users' }
 });
 // data?.data is User[] | undefined
+```
+
+Additional types exported from `axly`:
+
+```typescript
+import type {
+  AxlyClient,
+  AxlyConfig,
+  RequestOptions,
+  UploadOptions,
+  InvalidateOptions,
+  CacheOptions,
+  ShouldRetry,
+  TokenCallbacks,
+  RefreshTokens,
+  StateData,
+  RequestStatus,
+  ToastHandler,
+  AxlyQueryOptions,
+  AxlyQueryResult,
+  AxlyMutationOptions,
+  AxlyMutationResult
+} from 'axly';
+
+// ShouldRetry signature
+const mySRetry: ShouldRetry = (err, attempt) => {
+  return err.response?.status === 503 && attempt < 2;
+};
 ```
 
 ---
