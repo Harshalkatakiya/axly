@@ -27,6 +27,7 @@ import {
 import { AuthError, CancelledError, RequestError } from './utils/errors.js';
 import { Emitter } from './internal/emitter.js';
 import { TokenManager } from './internal/tokenManager.js';
+import { buildRequestKey } from './internal/requestKey.js';
 
 interface ResponseWithData {
   message: string;
@@ -42,15 +43,6 @@ const isAxlyConfig = (input: unknown): input is AxlyConfig =>
   input !== null &&
   'baseURL' in input &&
   typeof (input as Record<string, unknown>)['baseURL'] === 'string';
-
-const buildRequestKey = (
-  method: string | undefined,
-  url: string,
-  params: Record<string, string | number | boolean> | undefined,
-  configId: string,
-  customHeaders?: Record<string, string>
-) =>
-  `${method?.toUpperCase() ?? 'GET'}:${configId}:${url}:${JSON.stringify(params ?? {})}:${JSON.stringify(customHeaders ?? {})}`;
 
 const resetState: StateData = {
   isLoading: false,
