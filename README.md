@@ -15,6 +15,7 @@ Axly is a powerful and flexible HTTP client library built on top of Axios, desig
 
 ## 📋 Table of Contents
 
+- [Migrating from v2 to v3](#-migrating-from-v2-to-v3)
 - [Features](#-features)
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
@@ -51,6 +52,85 @@ Axly is a powerful and flexible HTTP client library built on top of Axios, desig
 - [Best Practices](#-best-practices)
 - [Contributing](#-contributing)
 - [License](#-license)
+
+---
+
+## 🚨 Migrating from v2 to v3
+
+v3 is a breaking release. The high-level API is unchanged — `createAxlyClient`, `useAxly`, `useAxlyQuery`, `useAxlyMutation` all work the same — but a handful of methods were renamed or consolidated.
+
+### 1. `clearCache` → `invalidate`
+
+`invalidate` replaces `clearCache` and gains pattern-matching.
+
+```ts
+// v2
+client.clearCache();
+client.clearCache('mainAPI');
+
+// v3
+client.invalidate();
+client.invalidate({ configId: 'mainAPI' });
+client.invalidate({ url: /\/users\// });
+client.invalidate({ predicate: (key) => key.includes('list') });
+```
+
+### 2. `setAuthorizationHeader` → `setAccessToken`
+
+They've been merged — `setAccessToken` now updates storage **and** the axios default header.
+
+```ts
+// v2
+client.setAuthorizationHeader(token);
+
+// v3
+client.setAccessToken(token);
+```
+
+### 3. `AxlyMutationOptions` generic signature
+
+The unused middle generic was removed:
+
+```ts
+// v2
+AxlyMutationOptions<T, D, C>;
+
+// v3
+AxlyMutationOptions<T, C>;
+```
+
+The `useAxlyMutation<T, D, C>(...)` hook signature itself is unchanged — only `AxlyMutationOptions` dropped the middle generic.
+
+### 4. Retry defaults
+
+v2 retried any error except cancellation. v3 only retries on:
+
+- Network errors (`ERR_NETWORK`, `ECONNABORTED`, `ETIMEDOUT`)
+- HTTP 5xx
+- HTTP 408 and 429
+
+To restore v2 behavior, pass `shouldRetry: () => true` on the config or per-request.
+
+### 5. Upload retries
+
+`upload()` is now implemented in terms of `request()` and inherits retry behavior. To preserve v2 (no retries), pass `retry: 0`:
+
+```ts
+client.upload(url, formData, { retry: 0 });
+```
+
+### New features in v3
+
+- **`authScheme`** — `AxlyConfig.authScheme?: string | null` (default `'Bearer'`). Pass `null` or `''` to send the token raw (e.g. for `Token abc123` schemes).
+- **`shouldRetry`** — custom retry predicate on both `AxlyConfig` and `RequestOptions`.
+- **`staleWhileRevalidate`** — extend `CacheOptions.staleWhileRevalidate` (ms) to serve stale responses while refreshing in the background.
+- **`invalidate({ url, predicate })`** — pattern-based cache invalidation.
+
+### Behavioral fixes (no API change)
+
+- Cache-key normalization — reordered query params now share the same cache entry (they produced different keys in v2).
+- 401 handling triggers refresh on the first 401 instead of after exhausting retries.
+- The internal cache-sweep timer now `.unref()`'s, so Node processes exit naturally without calling `destroy()`.
 
 ---
 
