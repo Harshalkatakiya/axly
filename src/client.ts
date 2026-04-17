@@ -12,7 +12,6 @@ import {
   AxlyConfig,
   ContentType,
   EventHandler,
-  RefreshTokens,
   RequestOptions,
   StateData,
   ToastHandler,
@@ -27,75 +26,15 @@ import {
 } from './utils/index.js';
 import { AuthError, CancelledError, RequestError } from './utils/errors.js';
 import { Emitter } from './internal/emitter.js';
+import { TokenManager } from './internal/tokenManager.js';
 
 interface ResponseWithData {
   message: string;
 }
 
-interface RefreshResponseData {
-  accessToken?: string;
-  refreshToken?: string;
-}
-
 interface CacheEntry<T> {
   response: AxiosResponse<T>;
   expiresAt: number;
-}
-
-class TokenManager {
-  private refreshPromise: Promise<RefreshTokens> | null = null;
-  constructor(
-    private config: AxlyConfig,
-    private axiosFactory: () => AxiosInstance,
-    private onAccessTokenSet?: (token: string | null) => void
-  ) {}
-  async refreshTokens(): Promise<RefreshTokens> {
-    if (this.refreshPromise) return this.refreshPromise;
-    this.refreshPromise = this.performRefresh();
-    try {
-      const tokens = await this.refreshPromise;
-      return tokens;
-    } finally {
-      this.refreshPromise = null;
-    }
-  }
-  private async performRefresh(): Promise<RefreshTokens> {
-    if (!this.config.refreshEndpoint) {
-      throw new AuthError('Refresh endpoint is missing.');
-    }
-    const refreshToken =
-      this.config.tokenCallbacks?.getRefreshToken?.() ??
-      this.config.refreshToken;
-    if (!refreshToken) {
-      throw new AuthError('Refresh token is missing.');
-    }
-    const instance = this.axiosFactory();
-    const resp = await instance.post<RefreshResponseData>(
-      this.config.refreshEndpoint,
-      { refreshToken },
-      { timeout: this.config.refreshTimeout ?? 10000 }
-    );
-    const { accessToken, refreshToken: newRefreshTokenFromResp } = resp.data;
-    const newRefreshToken = newRefreshTokenFromResp ?? refreshToken;
-    if (!accessToken)
-      throw new AuthError('Refresh response missing access token');
-    if (this.config.tokenCallbacks?.setAccessToken) {
-      this.config.tokenCallbacks.setAccessToken(accessToken);
-    } else {
-      this.config.accessToken = accessToken;
-    }
-    if (this.config.tokenCallbacks?.setRefreshToken) {
-      this.config.tokenCallbacks.setRefreshToken(newRefreshToken);
-    } else {
-      this.config.refreshToken = newRefreshToken;
-    }
-    this.onAccessTokenSet?.(accessToken);
-    this.config.onRefresh?.({ accessToken, refreshToken: newRefreshToken });
-    return { accessToken, refreshToken: newRefreshToken };
-  }
-  clear() {
-    this.refreshPromise = null;
-  }
 }
 
 const isAxlyConfig = (input: unknown): input is AxlyConfig =>
