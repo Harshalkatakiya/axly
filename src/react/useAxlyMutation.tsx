@@ -12,7 +12,7 @@ const useAxlyMutation = <
   D = unknown,
   C extends string = 'default'
 >(
-  options: AxlyMutationOptions<T, D, C>
+  options: AxlyMutationOptions<T, C>
 ): AxlyMutationResult<T, D, C> => {
   const { client, onSuccess, onError, onSettled } = options;
 

@@ -1,4 +1,4 @@
-import {
+import type {
   AxiosError,
   AxiosRequestConfig,
   AxiosResponse,
@@ -41,8 +41,12 @@ export type EventHandler = (...args: unknown[]) => void;
 
 export type RequestStatus = 'idle' | 'loading' | 'success' | 'error';
 
+export type ShouldRetry = (error: AxiosError, attempt: number) => boolean;
+
 export interface CacheOptions {
   ttl?: number;
+  /** Additional window (in ms) during which a stale cached response is served while a background refresh runs. */
+  staleWhileRevalidate?: number;
 }
 
 export interface AxlyConfig {
@@ -52,6 +56,8 @@ export interface AxlyConfig {
   refreshToken?: string | null;
   refreshEndpoint?: string;
   baseURL: string;
+  /** Auth scheme prefix in the Authorization header. Default `'Bearer'`. Pass `null` or `''` to send the token raw. */
+  authScheme?: string | null;
   requestInterceptors?: Array<
     (
       config: InternalAxiosRequestConfig
@@ -67,6 +73,8 @@ export interface AxlyConfig {
   onRefresh?: (tokens: RefreshTokens) => void;
   onRefreshFail?: (err: Error) => void;
   dedupeRequests?: boolean;
+  /** Predicate that decides whether to retry a given error. Default: network errors + 5xx + 408 + 429. */
+  shouldRetry?: ShouldRetry;
 }
 
 export type ContentType =
@@ -103,6 +111,8 @@ export interface RequestOptions<D = unknown, C extends string = 'default'> {
   configId?: C;
   dedupe?: boolean;
   cache?: boolean | CacheOptions;
+  /** Per-request override of the retry predicate. Takes precedence over the config-level `shouldRetry`. */
+  shouldRetry?: ShouldRetry;
 }
 
 export type StateData = {
@@ -122,6 +132,21 @@ export interface UploadOptions<C extends string = 'default'> {
   cancelable?: boolean;
   onCancel?: () => void;
   configId?: C;
+  retry?: number;
+  shouldRetry?: ShouldRetry;
+  toastHandler?: ToastHandler;
+  successToast?: boolean;
+  errorToast?: boolean;
+  customToastMessage?: string;
+  customToastMessageType?: CustomToastMessageType;
+  customErrorToastMessage?: string;
+  customErrorToastMessageType?: CustomToastMessageType;
+}
+
+export interface InvalidateOptions<C extends string = 'default'> {
+  configId?: C;
+  url?: string | RegExp;
+  predicate?: (key: string) => boolean;
 }
 
 export interface AxlyClient<C extends string = 'default'> {
@@ -138,7 +163,6 @@ export interface AxlyClient<C extends string = 'default'> {
   ): Promise<AxiosResponse<T>>;
   setAccessToken(token: string | null, configId?: C): void;
   setRefreshToken(token: string | null, configId?: C): void;
-  setAuthorizationHeader(token: string | null, configId?: C): void;
   setDefaultHeader(
     name: string,
     value: string | number | boolean,
@@ -146,7 +170,7 @@ export interface AxlyClient<C extends string = 'default'> {
   ): void;
   clearDefaultHeader(name: string, configId?: C): void;
   cancelRequest(controller?: AbortController | null): void;
-  clearCache(configId?: C): void;
+  invalidate(options?: InvalidateOptions<C>): void;
   destroy(): void;
   on(event: string, handler: (...args: unknown[]) => void): () => void;
 }
@@ -176,7 +200,6 @@ export interface AxlyQueryResult<T = unknown> {
 
 export interface AxlyMutationOptions<
   T = unknown,
-  _D = unknown,
   C extends string = 'default'
 > {
   client: AxlyClient<C>;

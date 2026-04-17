@@ -1,6 +1,6 @@
-/* global AbortController */
+/* global AbortController, FormData */
 import axios, {
-  AxiosError,
+  AxiosHeaders,
   AxiosInstance,
   AxiosProgressEvent,
   AxiosRequestConfig,
@@ -12,14 +12,13 @@ import {
   AxlyConfig,
   ContentType,
   EventHandler,
+  InvalidateOptions,
   RequestOptions,
   StateData,
   ToastHandler,
   UploadOptions
 } from './types/index.js';
 import {
-  delay,
-  exponentialBackoffWithJitter,
   hasMessageInResponse,
   isBrowser,
   sanitizeToastMessage
@@ -27,15 +26,24 @@ import {
 import { AuthError, CancelledError, RequestError } from './utils/errors.js';
 import { Emitter } from './internal/emitter.js';
 import { TokenManager } from './internal/tokenManager.js';
+import { CacheStore } from './internal/cache.js';
+import { InflightMap } from './internal/deduper.js';
 import { buildRequestKey } from './internal/requestKey.js';
+import { executeRequest } from './internal/executor.js';
 
 interface ResponseWithData {
   message: string;
 }
 
-interface CacheEntry<T> {
-  response: AxiosResponse<T>;
-  expiresAt: number;
+interface ConfigRuntime {
+  config: AxlyConfig;
+  instance: AxiosInstance;
+  tokenManager: TokenManager;
+  applyAccessToken: (token: string | null) => void;
+  setDefaultHeader: (
+    name: string,
+    value: string | number | boolean | null
+  ) => void;
 }
 
 const isAxlyConfig = (input: unknown): input is AxlyConfig =>
@@ -43,6 +51,13 @@ const isAxlyConfig = (input: unknown): input is AxlyConfig =>
   input !== null &&
   'baseURL' in input &&
   typeof (input as Record<string, unknown>)['baseURL'] === 'string';
+
+const normalizeConfigs = <CM extends Record<string, AxlyConfig>>(
+  configInput: CM | AxlyConfig
+): CM =>
+  isAxlyConfig(configInput) ?
+    ({ default: configInput as AxlyConfig } as unknown as CM)
+  : (configInput as CM);
 
 const resetState: StateData = {
   isLoading: false,
@@ -60,87 +75,82 @@ const successState: StateData = {
   abortController: null
 };
 
+const formatAuthHeaderValue = (
+  token: string,
+  scheme: string | null | undefined
+): string => {
+  if (scheme == null || scheme === '') return token;
+  return `${scheme} ${token}`;
+};
+
 export const createAxlyClient = <
   CM extends Record<string, AxlyConfig> = { default: AxlyConfig }
 >(
   configInput: CM | AxlyConfig
 ): AxlyClient<keyof CM & string> => {
-  const configs: CM =
-    isAxlyConfig(configInput) ?
-      ({ default: configInput as AxlyConfig } as unknown as CM)
-    : (configInput as CM);
-
+  const configs: CM = normalizeConfigs<CM>(configInput);
   type CMKey = keyof CM & string;
+
   const emitter = new Emitter();
-  const axiosInstances: Map<CMKey, AxiosInstance> = new Map();
-  const tokenManagers: Map<CMKey, TokenManager> = new Map();
-  const applyAccessTokenFunctions: Map<CMKey, (token: string | null) => void> =
-    new Map();
-  const setDefaultHeaderFunctions: Map<
-    CMKey,
-    (name: string, value: string | number | boolean | null) => void
-  > = new Map();
-
-  // Deduplication: in-flight request promises keyed by dedupe key
-  const inflightRequests: Map<string, Promise<AxiosResponse>> = new Map();
-
-  // Cache: stores responses with expiry
-  const responseCache: Map<string, CacheEntry<unknown>> = new Map();
-
-  // Periodic cache sweep to evict expired entries
-  const cacheSweepInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of responseCache) {
-      if ((entry as CacheEntry<unknown>).expiresAt <= now) {
-        responseCache.delete(key);
-      }
-    }
-  }, 60_000);
+  const cache = new CacheStore();
+  const deduper = new InflightMap();
+  const runtimes: Map<CMKey, ConfigRuntime> = new Map();
 
   Object.entries(configs).forEach(([cfgId, config]) => {
     const configId = cfgId as CMKey;
-    const axiosInstance = axios.create({ baseURL: config.baseURL });
+    const instance = axios.create({ baseURL: config.baseURL });
+
     config.requestInterceptors?.forEach((interceptor) =>
-      axiosInstance.interceptors.request.use(
+      instance.interceptors.request.use(
         interceptor as (
           c: InternalAxiosRequestConfig
         ) => InternalAxiosRequestConfig
       )
     );
     config.responseInterceptors?.forEach((interceptor) =>
-      axiosInstance.interceptors.response.use(
+      instance.interceptors.response.use(
         interceptor as (r: AxiosResponse) => AxiosResponse
       )
     );
-    axiosInstances.set(configId, axiosInstance);
 
-    const applyAccessToken = (token: string | null) => {
-      const defaults = axiosInstance.defaults;
-      defaults.headers = defaults.headers ?? {};
-      if (token) defaults.headers['Authorization'] = `Bearer ${token}`;
-      else
-        delete (defaults.headers as Record<string, unknown>)['Authorization'];
-    };
-    applyAccessTokenFunctions.set(configId, applyAccessToken);
-
-    const tokenManager = new TokenManager(
-      config,
-      () => axiosInstance,
-      applyAccessToken
+    const commonHeaders = new AxiosHeaders(
+      instance.defaults.headers.common as Record<string, string>
     );
-    tokenManagers.set(configId, tokenManager);
+    instance.defaults.headers.common =
+      commonHeaders as typeof instance.defaults.headers.common;
+
+    const applyAccessToken = (token: string | null): void => {
+      if (token) {
+        commonHeaders.set(
+          'Authorization',
+          formatAuthHeaderValue(token, config.authScheme)
+        );
+      } else {
+        commonHeaders.delete('Authorization');
+      }
+    };
 
     const setDefaultHeader = (
       name: string,
       value: string | number | boolean | null
-    ) => {
-      const defaults = axiosInstance.defaults;
-      defaults.headers = defaults.headers ?? {};
-      if (value == null)
-        delete (defaults.headers as Record<string, unknown>)[name];
-      else (defaults.headers as Record<string, unknown>)[name] = String(value);
+    ): void => {
+      if (value == null) commonHeaders.delete(name);
+      else commonHeaders.set(name, String(value));
     };
-    setDefaultHeaderFunctions.set(configId, setDefaultHeader);
+
+    const tokenManager = new TokenManager(
+      config,
+      () => instance,
+      applyAccessToken
+    );
+
+    runtimes.set(configId, {
+      config,
+      instance,
+      tokenManager,
+      applyAccessToken,
+      setDefaultHeader
+    });
 
     const initialToken =
       config.multiToken ?
@@ -151,11 +161,16 @@ export const createAxlyClient = <
     applyAccessToken(initialToken);
   });
 
+  const requireRuntime = (configId: CMKey): ConfigRuntime => {
+    const rt = runtimes.get(configId);
+    if (!rt) throw new Error(`Config ${configId} not found`);
+    return rt;
+  };
+
   const getAccessToken = (
     configId: CMKey = 'default' as CMKey
   ): string | null => {
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
+    const { config } = requireRuntime(configId);
     return config.multiToken ?
         (config.tokenCallbacks?.getAccessToken?.() ??
           config.accessToken ??
@@ -165,26 +180,16 @@ export const createAxlyClient = <
 
   const attachAuthHeader = (
     reqConfig: AxiosRequestConfig,
-    configId: CMKey = 'default' as CMKey
-  ) => {
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
-    const token =
-      config.multiToken ? getAccessToken(configId) : (config.token ?? null);
+    configId: CMKey
+  ): AxiosRequestConfig => {
+    const { config } = requireRuntime(configId);
+    const token = getAccessToken(configId);
     if (token) {
       reqConfig.headers = reqConfig.headers ?? {};
-      reqConfig.headers['Authorization'] = `Bearer ${token}`;
+      (reqConfig.headers as Record<string, string>)['Authorization'] =
+        formatAuthHeaderValue(token, config.authScheme);
     }
     return reqConfig;
-  };
-
-  const performRequest = async <T>(
-    cfg: AxiosRequestConfig,
-    configId: CMKey = 'default' as CMKey
-  ): Promise<AxiosResponse<T>> => {
-    const instance = axiosInstances.get(configId);
-    if (!instance) throw new Error(`Axios instance for ${configId} not found`);
-    return instance.request<T>(cfg);
   };
 
   const applyStateReset = (
@@ -194,10 +199,70 @@ export const createAxlyClient = <
         ) => void)
       | undefined,
     status: StateData['status']
-  ) => {
-    stateUpdater?.(
+  ): void => {
+    if (!stateUpdater) return;
+    stateUpdater(
       status === 'success' ? successState : { ...resetState, status }
     );
+  };
+
+  const buildRequestConfig = <D>(
+    options: RequestOptions<D, CMKey>,
+    stateUpdater:
+      | ((
+          update: Partial<StateData> | ((prev: StateData) => StateData)
+        ) => void)
+      | undefined,
+    abortController: AbortController | undefined
+  ): AxiosRequestConfig => {
+    const {
+      method,
+      data,
+      url,
+      contentType: rawContentType,
+      customHeaders,
+      responseType = 'json',
+      params,
+      baseURL,
+      onUploadProgress,
+      onDownloadProgress,
+      timeout = 100_000
+    } = options;
+
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
+    const contentType =
+      rawContentType ?? (isFormData ? undefined : 'application/json');
+
+    const headers: Record<string, string> = { ...(customHeaders ?? {}) };
+    if (contentType) headers['Content-Type'] = contentType as ContentType;
+
+    const cfg: AxiosRequestConfig = {
+      method,
+      url,
+      data,
+      params,
+      responseType,
+      timeout,
+      baseURL,
+      headers,
+      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+        const percent = Math.round(
+          (progressEvent.loaded * 100) / (progressEvent.total || 1)
+        );
+        stateUpdater?.((prev) => ({ ...prev, uploadProgress: percent }));
+        onUploadProgress?.(percent);
+      },
+      onDownloadProgress: (progressEvent: AxiosProgressEvent) => {
+        const percent = Math.round(
+          (progressEvent.loaded * 100) / (progressEvent.total || 1)
+        );
+        stateUpdater?.((prev) => ({ ...prev, downloadProgress: percent }));
+        onDownloadProgress?.(percent);
+      }
+    };
+    if (abortController) cfg.signal = abortController.signal;
+    return cfg;
   };
 
   const request = async <T = unknown, D = unknown>(
@@ -207,17 +272,14 @@ export const createAxlyClient = <
     ) => void
   ): Promise<AxiosResponse<T>> => {
     const configId = (options.configId ?? ('default' as CMKey)) as CMKey;
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
+    const rt = requireRuntime(configId);
+    const { config, instance, tokenManager, applyAccessToken } = rt;
+
     const {
       method,
-      data,
       url,
-      contentType = 'application/json',
-      customHeaders,
-      responseType = 'json',
       params,
-      baseURL,
+      customHeaders,
       toastHandler: optionsToastHandler,
       successToast = false,
       errorToast = false,
@@ -225,105 +287,101 @@ export const createAxlyClient = <
       customToastMessageType = 'success',
       customErrorToastMessage,
       customErrorToastMessageType = 'error',
-      onUploadProgress,
-      onDownloadProgress,
-      timeout = 100000,
       retry = 0,
       cancelable = false,
       onCancel,
       dedupe = false,
-      cache = false
+      cache: cacheOpt = false,
+      shouldRetry
     } = options;
 
     const effectiveToastHandler: ToastHandler | undefined =
-      (isBrowser ? (optionsToastHandler ?? config.toastHandler) : undefined) ??
-      undefined;
+      isBrowser ? (optionsToastHandler ?? config.toastHandler) : undefined;
 
-    // Cache lookup (GET-only)
+    const resolvedShouldRetry = shouldRetry ?? config.shouldRetry;
+
     const isGetMethod = (method ?? 'GET').toUpperCase() === 'GET';
-    if (cache && isGetMethod) {
-      const cacheKey = buildRequestKey(
-        method,
-        url,
-        params,
-        configId,
-        customHeaders
-      );
-      const entry = responseCache.get(cacheKey) as CacheEntry<T> | undefined;
-      if (entry) {
-        if (entry.expiresAt > Date.now()) {
-          return entry.response;
+    const cacheEnabled = cacheOpt !== false && isGetMethod;
+    const ttlMs =
+      typeof cacheOpt === 'object' && cacheOpt.ttl != null ?
+        cacheOpt.ttl
+      : 300_000;
+    const swrMs =
+      typeof cacheOpt === 'object' && cacheOpt.staleWhileRevalidate != null ?
+        cacheOpt.staleWhileRevalidate
+      : 0;
+
+    const cacheKey = buildRequestKey(
+      method,
+      url,
+      params,
+      configId,
+      customHeaders
+    );
+
+    // Cache lookup
+    if (cacheEnabled) {
+      const lookup = cache.get<T>(cacheKey);
+      if (lookup.status === 'fresh') {
+        return lookup.response;
+      }
+      if (lookup.status === 'stale') {
+        if (cache.markRefreshing(cacheKey)) {
+          void (async () => {
+            try {
+              const bgRequestConfig = buildRequestConfig(
+                { ...options, successToast: false, errorToast: false },
+                undefined,
+                undefined
+              );
+              attachAuthHeader(bgRequestConfig, configId);
+              const fresh = await executeRequest<T>({
+                instance,
+                requestConfig: bgRequestConfig,
+                config,
+                retry,
+                tokenManager,
+                applyAccessToken,
+                reapplyAuthHeader: () =>
+                  attachAuthHeader(bgRequestConfig, configId),
+                shouldRetry: resolvedShouldRetry
+              });
+              cache.set(cacheKey, fresh, ttlMs, swrMs);
+            } catch {
+              // Background refresh errors are swallowed by design
+            } finally {
+              cache.clearRefreshing(cacheKey);
+            }
+          })();
         }
-        responseCache.delete(cacheKey);
+        return lookup.response;
       }
     }
 
-    // Deduplication: if an identical request is already in-flight, share it
-    const shouldDedupe = dedupe || config.dedupeRequests;
-    if (shouldDedupe && isGetMethod) {
-      const dedupeKey = buildRequestKey(
-        method,
-        url,
-        params,
-        configId,
-        customHeaders
-      );
-      const inflight = inflightRequests.get(dedupeKey) as
-        | Promise<AxiosResponse<T>>
-        | undefined;
+    // Deduplication
+    const shouldDedupe = (dedupe || config.dedupeRequests) && isGetMethod;
+    if (shouldDedupe) {
+      const inflight = deduper.get<T>(cacheKey);
       if (inflight) return inflight;
     }
 
     const abortController = cancelable ? new AbortController() : undefined;
-    if (stateUpdater) {
-      stateUpdater({
-        isLoading: true,
-        status: 'loading',
-        uploadProgress: 0,
-        downloadProgress: 0,
-        abortController
-      });
-    }
-    const requestConfig: AxiosRequestConfig = {
-      method,
-      url,
-      data,
-      params,
-      responseType,
-      timeout,
-      baseURL,
-      headers: {
-        'Content-Type': contentType as ContentType,
-        ...customHeaders
-      },
-      onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / (progressEvent.total || 1)
-        );
-        if (stateUpdater)
-          stateUpdater((prev) => ({
-            ...prev,
-            uploadProgress: percentCompleted
-          }));
-        onUploadProgress?.(percentCompleted);
-      },
-      onDownloadProgress: (progressEvent: AxiosProgressEvent) => {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / (progressEvent.total || 1)
-        );
-        if (stateUpdater)
-          stateUpdater((prev) => ({
-            ...prev,
-            downloadProgress: percentCompleted
-          }));
-        onDownloadProgress?.(percentCompleted);
-      }
-    };
-    if (cancelable && abortController)
-      requestConfig.signal = abortController.signal;
+    stateUpdater?.({
+      isLoading: true,
+      status: 'loading',
+      uploadProgress: 0,
+      downloadProgress: 0,
+      abortController: abortController ?? null
+    });
+
+    const requestConfig = buildRequestConfig(
+      options,
+      stateUpdater,
+      abortController
+    );
     attachAuthHeader(requestConfig, configId);
 
-    const handleSuccess = (response: AxiosResponse<T>) => {
+    const handleSuccess = (response: AxiosResponse<T>): AxiosResponse<T> => {
       applyStateReset(stateUpdater, 'success');
       if (successToast && effectiveToastHandler) {
         const msg =
@@ -337,49 +395,21 @@ export const createAxlyClient = <
             customToastMessageType
           );
       }
-      // Store in cache if requested
-      if (cache && isGetMethod) {
-        const cacheKey = buildRequestKey(
-          method,
-          url,
-          params,
-          configId,
-          customHeaders
-        );
-        const ttl =
-          typeof cache === 'object' && cache.ttl != null ? cache.ttl : 300_000; // 5 minutes default
-        responseCache.set(cacheKey, {
-          response,
-          expiresAt: Date.now() + ttl
-        } as CacheEntry<unknown>);
+      if (cacheEnabled) {
+        cache.set(cacheKey, response, ttlMs, swrMs);
       }
       return response;
     };
 
-    const executeWithRetry = async (): Promise<AxiosResponse<T>> => {
-      let lastError: AxiosError<T> | null = null;
-      for (let attempt = 0; attempt <= retry; attempt++) {
-        try {
-          const response = await performRequest<T>(requestConfig, configId);
-          return handleSuccess(response);
-        } catch (err) {
-          lastError = err as AxiosError<T>;
-          if (axios.isCancel(err)) {
-            applyStateReset(stateUpdater, 'idle');
-            onCancel?.();
-            throw new CancelledError();
-          }
-          if (attempt < retry) {
-            const backoff = exponentialBackoffWithJitter(attempt);
-            await delay(backoff);
-            continue;
-          }
-        }
-      }
+    const handleError = async (err: unknown): Promise<AxiosResponse<T>> => {
       applyStateReset(stateUpdater, 'error');
-      if (lastError) {
+      // Pass through our own error classes unchanged — they already carry the right context.
+      if (err instanceof CancelledError) throw err;
+      if (err instanceof AuthError) throw err;
+      if (err instanceof RequestError) throw err;
+      if (axios.isAxiosError(err)) {
         if (errorToast && effectiveToastHandler) {
-          const responseData = lastError.response?.data;
+          const responseData = err.response?.data;
           const errorMessage =
             customErrorToastMessage ??
             (hasMessageInResponse(responseData) ?
@@ -393,82 +423,48 @@ export const createAxlyClient = <
         }
         if (config.errorHandler) {
           try {
-            const handled = await config.errorHandler(lastError as AxiosError);
+            const handled = await config.errorHandler(err);
             return handled as AxiosResponse<T>;
           } catch {
-            // Ignore errors from the error handler
+            // Fall through to throwing RequestError
           }
         }
         throw new RequestError(
-          lastError.message || 'Request failed',
-          lastError,
-          lastError.response ?? null,
-          lastError.code ?? null
+          err.message || 'Request failed',
+          err,
+          err.response ?? null,
+          err.code ?? null
         );
       }
-      throw new RequestError('Request failed');
+      if (err instanceof Error) {
+        throw new RequestError(err.message, err);
+      }
+      throw new RequestError('Request failed', err);
     };
 
-    const executeRequest = async (): Promise<AxiosResponse<T>> => {
+    const run = async (): Promise<AxiosResponse<T>> => {
       try {
-        return await executeWithRetry();
+        const response = await executeRequest<T>({
+          instance,
+          requestConfig,
+          config,
+          retry,
+          tokenManager,
+          applyAccessToken,
+          reapplyAuthHeader: () => attachAuthHeader(requestConfig, configId),
+          shouldRetry: resolvedShouldRetry,
+          onCancel
+        });
+        return handleSuccess(response);
       } catch (err) {
-        // Handle 401 with token refresh — only once, outside the retry loop
-        if (
-          axios.isAxiosError(err) &&
-          err.response?.status === 401 &&
-          config.multiToken &&
-          config.refreshEndpoint
-        ) {
-          try {
-            const tokenManager = tokenManagers.get(configId);
-            if (!tokenManager)
-              throw new Error(`Token manager for ${configId} not found`, {
-                cause: err
-              });
-            const tokens = await tokenManager.refreshTokens();
-            const applyAccessToken = applyAccessTokenFunctions.get(configId);
-            if (!applyAccessToken)
-              throw new Error(
-                `Apply access token function for ${configId} not found`,
-                { cause: err }
-              );
-            applyAccessToken(tokens.accessToken);
-            attachAuthHeader(requestConfig, configId);
-            return await executeWithRetry();
-          } catch (refreshErr) {
-            if (refreshErr instanceof CancelledError) throw refreshErr;
-            if (refreshErr instanceof RequestError) throw refreshErr;
-            config.onRefreshFail?.(
-              refreshErr instanceof Error ? refreshErr : (
-                new Error('Refresh failed')
-              )
-            );
-            applyStateReset(stateUpdater, 'error');
-            throw new AuthError('Refresh failed; authentication required');
-          }
-        }
-        throw err;
+        return handleError(err);
       }
     };
 
-    // Register dedupe promise
-    if (shouldDedupe && isGetMethod) {
-      const dedupeKey = buildRequestKey(
-        method,
-        url,
-        params,
-        configId,
-        customHeaders
-      );
-      const promise = executeRequest().finally(() => {
-        inflightRequests.delete(dedupeKey);
-      });
-      inflightRequests.set(dedupeKey, promise as Promise<AxiosResponse>);
-      return promise;
+    if (shouldDedupe) {
+      return deduper.register(cacheKey, run());
     }
-
-    return executeRequest();
+    return run();
   };
 
   const upload = async <T = unknown>(
@@ -476,140 +472,113 @@ export const createAxlyClient = <
     formData: FormData,
     opts?: UploadOptions<CMKey>
   ): Promise<AxiosResponse<T>> => {
-    const configId = (opts?.configId ?? ('default' as CMKey)) as CMKey;
-    const instance = axiosInstances.get(configId);
-    if (!instance) throw new Error(`Axios instance for ${configId} not found`);
     const {
-      headers = {},
+      headers,
       timeout = 120_000,
       onUploadProgress,
       onDownloadProgress,
       baseURL,
       cancelable = false,
-      onCancel
+      onCancel,
+      configId,
+      retry,
+      shouldRetry,
+      toastHandler,
+      successToast,
+      errorToast,
+      customToastMessage,
+      customToastMessageType,
+      customErrorToastMessage,
+      customErrorToastMessageType
     } = opts ?? {};
-    const abortController = cancelable ? new AbortController() : undefined;
-    const requestConfig: AxiosRequestConfig = {
-      method: 'post',
+
+    return request<T, FormData>({
+      method: 'POST',
       url,
       data: formData,
-      headers: {
-        ...headers
-      },
+      customHeaders: headers,
       timeout,
       baseURL,
-      onUploadProgress: (ev: AxiosProgressEvent) => {
-        const percent = Math.round((ev.loaded * 100) / (ev.total || 1));
-        onUploadProgress?.(percent);
-      },
-      onDownloadProgress: (ev: AxiosProgressEvent) => {
-        const percent = Math.round((ev.loaded * 100) / (ev.total || 1));
-        onDownloadProgress?.(percent);
-      }
-    };
-    if (cancelable && abortController)
-      requestConfig.signal = abortController.signal;
-    attachAuthHeader(requestConfig, configId);
-    const config = configs[configId];
-    const performUpload = async (): Promise<AxiosResponse<T>> => {
-      try {
-        return await instance.request<T>(requestConfig);
-      } catch (err) {
-        if (axios.isCancel(err)) {
-          onCancel?.();
-          throw new CancelledError();
-        }
-        throw err;
-      }
-    };
-
-    try {
-      return await performUpload();
-    } catch (err) {
-      // Handle 401 with token refresh — one attempt
-      if (
-        config &&
-        axios.isAxiosError(err) &&
-        err.response?.status === 401 &&
-        config.multiToken &&
-        config.refreshEndpoint
-      ) {
-        try {
-          const tokenManager = tokenManagers.get(configId);
-          if (!tokenManager) throw err;
-          const tokens = await tokenManager.refreshTokens();
-          const applyAccessToken = applyAccessTokenFunctions.get(configId);
-          if (applyAccessToken) applyAccessToken(tokens.accessToken);
-          attachAuthHeader(requestConfig, configId);
-          return await performUpload();
-        } catch (refreshErr) {
-          if (refreshErr instanceof CancelledError) throw refreshErr;
-          config.onRefreshFail?.(
-            refreshErr instanceof Error ? refreshErr : (
-              new Error('Refresh failed')
-            )
-          );
-          throw new AuthError('Refresh failed; authentication required');
-        }
-      }
-      throw err;
-    }
+      cancelable,
+      onCancel,
+      configId,
+      retry,
+      shouldRetry,
+      onUploadProgress,
+      onDownloadProgress,
+      toastHandler,
+      successToast,
+      errorToast,
+      customToastMessage,
+      customToastMessageType,
+      customErrorToastMessage,
+      customErrorToastMessageType
+    });
   };
 
-  const cancelRequest = (controller?: AbortController | null) => {
+  const cancelRequest = (controller?: AbortController | null): void => {
     if (controller) controller.abort();
   };
 
-  const clearCache = (configId?: CMKey) => {
+  const invalidate = (options?: InvalidateOptions<CMKey>): void => {
+    if (!options) {
+      cache.invalidate();
+      deduper.clear();
+      return;
+    }
+    const { configId, url, predicate } = options;
+    const matchers: Array<(key: string) => boolean> = [];
     if (configId) {
       const suffix = `:${configId}:`;
-      for (const key of responseCache.keys()) {
-        if (key.includes(suffix)) responseCache.delete(key);
-      }
-      for (const key of inflightRequests.keys()) {
-        if (key.includes(suffix)) inflightRequests.delete(key);
-      }
-    } else {
-      responseCache.clear();
-      inflightRequests.clear();
+      matchers.push((k) => k.includes(suffix));
     }
+    if (url instanceof RegExp) {
+      matchers.push((k) => url.test(k));
+    } else if (typeof url === 'string') {
+      matchers.push((k) => k.includes(`:${url}:`) || k.includes(`:${url}`));
+    }
+    if (predicate) matchers.push(predicate);
+    const finalPredicate =
+      matchers.length === 0 ?
+        undefined
+      : (k: string) => matchers.every((m) => m(k));
+    cache.invalidate(finalPredicate);
+    deduper.invalidate(finalPredicate);
   };
 
-  const destroy = () => {
-    clearInterval(cacheSweepInterval);
-    tokenManagers.forEach((tm) => tm.clear());
-    axiosInstances.clear();
-    tokenManagers.clear();
-    applyAccessTokenFunctions.clear();
-    setDefaultHeaderFunctions.clear();
-    inflightRequests.clear();
-    responseCache.clear();
+  const destroy = (): void => {
+    cache.destroy();
+    deduper.clear();
+    runtimes.forEach((rt) => rt.tokenManager.clear());
+    runtimes.clear();
     emitter.emit('destroy');
   };
 
-  const on = (event: string, fn: EventHandler) => emitter.on(event, fn);
+  const on = (event: string, fn: EventHandler): (() => void) =>
+    emitter.on(event, fn);
 
   const setAccessToken = (
     token: string | null,
     configId: CMKey = 'default' as CMKey
-  ) => {
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
-    if (config.tokenCallbacks?.setAccessToken) {
-      config.tokenCallbacks.setAccessToken(token);
+  ): void => {
+    const { config, applyAccessToken } = requireRuntime(configId);
+    if (config.multiToken) {
+      if (config.tokenCallbacks?.setAccessToken) {
+        config.tokenCallbacks.setAccessToken(token);
+      } else {
+        config.accessToken = token;
+      }
     } else {
-      config.accessToken = token;
+      config.token = token;
     }
-    const applyAccessToken = applyAccessTokenFunctions.get(configId);
-    if (applyAccessToken) applyAccessToken(token);
+    applyAccessToken(token);
   };
 
   const setRefreshToken = (
     token: string | null,
     configId: CMKey = 'default' as CMKey
-  ) => {
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
+  ): void => {
+    const { config } = requireRuntime(configId);
     if (config.tokenCallbacks?.setRefreshToken) {
       config.tokenCallbacks.setRefreshToken(token);
     } else {
@@ -617,66 +586,35 @@ export const createAxlyClient = <
     }
   };
 
-  const setAuthorizationHeader = (
-    token: string | null,
-    configId: CMKey = 'default' as CMKey
-  ) => {
-    const config = configs[configId];
-    if (!config) throw new Error(`Config ${configId} not found`);
-    const applyAccessToken = applyAccessTokenFunctions.get(configId);
-    if (!applyAccessToken)
-      throw new Error(`Apply access token function for ${configId} not found`);
-    applyAccessToken(token);
-    if (token != null) {
-      if (config.multiToken) {
-        if (config.tokenCallbacks?.setAccessToken)
-          config.tokenCallbacks.setAccessToken(token);
-        else config.accessToken = token;
-      } else {
-        config.token = token;
-      }
-    } else {
-      if (config.multiToken) {
-        if (config.tokenCallbacks?.setAccessToken)
-          config.tokenCallbacks.setAccessToken(null);
-        else config.accessToken = null;
-      } else {
-        config.token = null;
-      }
-    }
-  };
-
   const setDefaultHeader = (
     name: string,
     value: string | number | boolean,
     configId: CMKey = 'default' as CMKey
-  ) => {
-    const fn = setDefaultHeaderFunctions.get(configId);
-    if (fn) fn(name, value);
+  ): void => {
+    const { setDefaultHeader: fn } = requireRuntime(configId);
+    fn(name, value);
   };
 
   const clearDefaultHeader = (
     name: string,
     configId: CMKey = 'default' as CMKey
-  ) => {
-    const fn = setDefaultHeaderFunctions.get(configId);
-    if (fn) fn(name, null);
+  ): void => {
+    const { setDefaultHeader: fn } = requireRuntime(configId);
+    fn(name, null);
   };
 
-  const client: AxlyClient<CMKey> = {
+  return {
     request,
     upload,
     setAccessToken,
     setRefreshToken,
-    setAuthorizationHeader,
     setDefaultHeader,
     clearDefaultHeader,
     cancelRequest,
-    clearCache,
+    invalidate,
     destroy,
     on
   };
-  return client;
 };
 
 export const createAxlyNodeClient = <
@@ -684,10 +622,7 @@ export const createAxlyNodeClient = <
 >(
   configInput: CM | AxlyConfig
 ) => {
-  const configs =
-    isAxlyConfig(configInput) ?
-      ({ default: configInput as AxlyConfig } as unknown as CM)
-    : (configInput as CM);
+  const configs = normalizeConfigs<CM>(configInput);
   const nodeConfigs: CM = Object.fromEntries(
     Object.entries(configs).map(([k, v]) => [
       k,
